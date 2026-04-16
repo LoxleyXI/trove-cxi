@@ -210,10 +210,14 @@ end
 
 local function getJobList(jobs)
     if jobs == nil or jobs == 0 then return nil; end
-    if bit.band(jobs, 0x3FFFFF) == 0x3FFFFF then return 'All Jobs'; end
+    -- Ashita's resource Jobs field follows the DAT convention: bit N = job N,
+    -- i.e. bit 1 = WAR, bit 2 = MNK, ..., bit 22 = RUN (bit 0 is NONE). This
+    -- differs from the server's packed form and from how `1 << (job-1)` is
+    -- used server-side. All-jobs here is bits 1..22 = 0x7FFFFE.
+    if bit.band(jobs, 0x7FFFFE) == 0x7FFFFE then return 'All Jobs'; end
     local list = {};
     for i = 1, 22 do
-        if bit.band(jobs, bit.lshift(1, i - 1)) ~= 0 then
+        if bit.band(jobs, bit.lshift(1, i)) ~= 0 then
             table.insert(list, JOB_ABBR[i]);
         end
     end
