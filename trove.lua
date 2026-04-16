@@ -234,8 +234,45 @@ ffi.cdef[[
     int WideCharToMultiByte(uint32_t CodePage, uint32_t dwFlags, const wchar_t* lpWideCharStr, int cchWideChar, char* lpMultiByteStr, int cbMultiByte, const char* lpDefaultChar, int* lpUsedDefaultChar);
 ]]
 
+-- FFXI item descriptions use a custom font that maps certain invalid-
+-- ShiftJIS byte pairs to element icons. MultiByteToWideChar doesn't know
+-- about them and emits "?". We translate each `0xEF <idx>` pair to a
+-- sentinel `0x01 <idx>` so the description still encodes the element
+-- position; the renderer later turns those into colored "●" glyphs.
+-- `0x01` (ASCII SOH) is a control character that won't appear in normal
+-- item text and survives the ShiftJIS → UTF-8 round-trip unchanged.
+local ELEMENT_COLORS = {
+    [0x1F] = { 1.00, 0.45, 0.25, 1.00 },  -- Fire: orange-red
+    [0x20] = { 0.55, 0.85, 1.00, 1.00 },  -- Ice: light cyan
+    [0x21] = { 0.55, 1.00, 0.55, 1.00 },  -- Wind: green
+    [0x22] = { 0.90, 0.75, 0.45, 1.00 },  -- Earth: tan
+    [0x23] = { 1.00, 0.90, 0.30, 1.00 },  -- Thunder: yellow
+    [0x24] = { 0.45, 0.60, 1.00, 1.00 },  -- Water: blue
+    [0x25] = { 1.00, 1.00, 0.85, 1.00 },  -- Light: pale
+    [0x26] = { 0.75, 0.45, 1.00, 1.00 },  -- Dark: purple
+};
+
+local ELEMENT_MARK = 0x01;  -- sentinel byte before a colored-element index
+
+local function replaceElementGlyphs(s)
+    if s:find('\xEF', 1, true) == nil then return s; end
+    local out, i, n = {}, 1, #s;
+    while i <= n do
+        local b = s:byte(i);
+        if b == 0xEF and i < n and ELEMENT_COLORS[s:byte(i + 1)] ~= nil then
+            out[#out + 1] = string.char(ELEMENT_MARK, s:byte(i + 1));
+            i = i + 2;
+        else
+            out[#out + 1] = s:sub(i, i);
+            i = i + 1;
+        end
+    end
+    return table.concat(out);
+end
+
 local function shiftjis_to_utf8(input)
     if input == nil then return nil; end
+    input = replaceElementGlyphs(input);
     local buf  = ffi.new('char[4096]');
     ffi.copy(buf, input);
     local wbuf = ffi.new('wchar_t[4096]');
@@ -249,6 +286,86 @@ local function getItemString(res, field, index)
     local val = res[field][index or 1];
     if val == nil then return nil; end
     return shiftjis_to_utf8(val);
+end
+
+-- Render an item description that may contain ELEMENT_MARK sentinels for
+-- per-element coloured dots. Text flows inline with `SameLine(0, 0)` and
+-- wraps at segment boundaries when the accumulated line would exceed the
+-- current content width. `\n` in the description forces a new line.
+--
+-- Element dots are drawn on the window's drawlist as filled circles
+-- instead of using a Unicode glyph — the default imgui font doesn't
+-- include U+25CF (BLACK CIRCLE) and falls back to "?" for it.
+local DOT_WIDTH  = 10;  -- total horizontal slot reserved for a dot
+local DOT_RADIUS = 3;
+
+local function renderColoredDescription(desc, defaultColor)
+    if desc == nil or #desc == 0 then return; end
+
+    local wrapWidth = imgui.GetContentRegionAvail();
+    local lineW    = 0;
+    local rendered = false;
+
+    local function preRender(w)
+        if rendered and (lineW + w > wrapWidth) then
+            -- The previous widget already advanced to the next row; skip
+            -- SameLine so this segment starts fresh on that row.
+            lineW = 0;
+        elseif rendered then
+            imgui.SameLine(0, 0);
+        end
+    end
+
+    local function emitText(text, color, escape)
+        local w = imgui.CalcTextSize(text);
+        preRender(w);
+        if escape then text = text:gsub('%%', '%%%%'); end
+        imgui.TextColored(color, text);
+        lineW = lineW + w;
+        rendered = true;
+    end
+
+    local function emitDot(color)
+        preRender(DOT_WIDTH);
+        local dl = imgui.GetWindowDrawList();
+        local sx, sy = imgui.GetCursorScreenPos();
+        local lineH = imgui.GetTextLineHeight();
+        dl:AddCircleFilled(
+            { sx + DOT_WIDTH / 2, sy + lineH / 2 },
+            DOT_RADIUS,
+            imgui.GetColorU32(color));
+        imgui.Dummy({ DOT_WIDTH, lineH });
+        lineW = lineW + DOT_WIDTH;
+        rendered = true;
+    end
+
+    local i, n = 1, #desc;
+    while i <= n do
+        local b = desc:byte(i);
+        if b == 0x0A then
+            if not rendered then imgui.Text(''); end
+            lineW, rendered = 0, false;
+            i = i + 1;
+        elseif b == ELEMENT_MARK and i < n then
+            local color = ELEMENT_COLORS[desc:byte(i + 1)];
+            if color ~= nil then
+                emitDot(color);
+                i = i + 2;
+            else
+                i = i + 1;
+            end
+        else
+            local start = i;
+            while i <= n do
+                local bb = desc:byte(i);
+                if bb == 0x0A or bb == ELEMENT_MARK then break; end
+                i = i + 1;
+            end
+            if i > start then
+                emitText(desc:sub(start, i - 1), defaultColor, true);
+            end
+        end
+    end
 end
 
 ------------------------------------------------------------
@@ -1004,9 +1121,12 @@ local function renderItemDetail(res, storedQty)
         end
         if #desc > 0 then
             imgui.Spacing();
-            imgui.PushTextWrapPos(imgui.GetContentRegionAvail() + imgui.GetCursorPosX());
-            imgui.TextColored(COLORS.desc, desc);
-            imgui.PopTextWrapPos();
+            -- renderColoredDescription wraps at segment boundaries itself
+            -- (it measures each piece against GetContentRegionAvail), and
+            -- already escapes "%" so printf format specifiers don't crash
+            -- imgui. The segment pipeline also turns the ELEMENT_MARK
+            -- sentinels into coloured "●" glyphs inline with the text.
+            renderColoredDescription(desc, COLORS.desc);
         end
     end
 
@@ -1974,6 +2094,33 @@ ashita.events.register('command', 'trove_command', function(e)
         return;
     elseif sub == 'refresh' then
         refreshAll();
+        return;
+    elseif sub == 'dump' and args[3] ~= nil then
+        -- Dump raw bytes of an item's description so we can map the custom
+        -- glyph sequences FFXI uses for elemental icons, etc. Usage:
+        --     /trove dump <itemid>
+        local id = tonumber(args[3]);
+        if id == nil then
+            print('[trove] usage: /trove dump <itemid>');
+            return;
+        end
+        local res = getItemRes(id);
+        if res == nil or res.Description == nil or res.Description[1] == nil then
+            print(string.format('[trove] no description for item %d', id));
+            return;
+        end
+        local raw = res.Description[1];
+        print(string.format('[trove] item %d description (%d bytes):', id, #raw));
+        -- Emit as space-separated hex, wrapping every 16 bytes.
+        local line = {};
+        for i = 1, #raw do
+            line[#line + 1] = string.format('%02X', raw:byte(i));
+            if #line == 16 then
+                print('  ' .. table.concat(line, ' '));
+                line = {};
+            end
+        end
+        if #line > 0 then print('  ' .. table.concat(line, ' ')); end
         return;
     end
 
