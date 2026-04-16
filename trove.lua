@@ -441,7 +441,57 @@ local state = {
     statusMsg     = '',
     statusIsErr   = false,
     statusUntil   = 0,
+
+    -- Cache bookkeeping. 0 means "never fetched".
+    -- Switching tabs / reopening the window within the TTL skips the request.
+    fetchedAt = {
+        summary  = 0,
+        currency = 0,
+        points   = 0,
+        squire   = 0,
+    },
+
+    -- Per-category item cache for E.Box drill-down. Keeps the items table
+    -- plus totals so we can restore a category view without a roundtrip.
+    --   [ahCat] = { fetchedAt, items, viewTotal, viewQty }
+    categoryCache = {},
 };
+
+------------------------------------------------------------
+-- Cache TTLs (seconds)
+------------------------------------------------------------
+-- Tuned to the change frequency of each data source:
+--   E.Box: mutates on any withdraw/store. Short TTL, but we also invalidate
+--   explicitly after addon-driven actions so the TTL is mostly a safety net.
+--   Currency can change from any reward drop, so keep it tight.
+--   Points and Squire change rarely; longer TTL keeps tab-hopping free.
+local TTL = {
+    summary  = 60,
+    category = 60,
+    currency = 60,
+    points   = 120,
+    squire   = 300,
+};
+
+------------------------------------------------------------
+-- Cache helpers
+------------------------------------------------------------
+local function cacheFresh(fetchedAt, ttl)
+    return fetchedAt > 0 and (os.clock() - fetchedAt) < ttl;
+end
+
+local function invalidateSummary()     state.fetchedAt.summary  = 0; end
+local function invalidateCurrency()    state.fetchedAt.currency = 0; end
+local function invalidatePoints()      state.fetchedAt.points   = 0; end
+local function invalidateSquire()      state.fetchedAt.squire   = 0; end
+local function invalidateCategories()  state.categoryCache      = {}; end
+
+-- Anything that mutates the ebox (addon withdraw, /box passthrough, !box chat)
+-- dirties the summary and every category view.
+local function invalidateEbox()
+    invalidateSummary();
+    invalidateCategories();
+end
 
 local ui = {
     isOpen       = { false },
@@ -472,16 +522,36 @@ local function goToSummary()
     ui.searchBuf[1]       = '';
     searchDebounce.lastBuf = '';
     searchDebounce.pending = false;
-    state.pendingRequest   = 'ebox_summary';
+
+    -- Only refetch the summary if the cached copy has aged past TTL. The
+    -- existing state.summary / state.summaryTotal / state.summaryQty remain
+    -- valid when the cache is fresh, so the render uses them directly.
+    if cacheFresh(state.fetchedAt.summary, TTL.summary) then
+        state.pendingRequest = nil;
+        return;
+    end
+
+    state.pendingRequest = 'ebox_summary';
     sendGetSummary();
 end
 
 local function goToCategory(ahCat)
     state.currentCategory = ahCat;
     state.searchActive    = false;
-    state.items           = {};
     ui.selectedItem       = nil;
-    state.pendingRequest  = 'ebox_category';
+
+    local cached = state.categoryCache[ahCat];
+    if cached and cacheFresh(cached.fetchedAt, TTL.category) then
+        -- Serve cached items; no packet needed.
+        state.items          = cached.items;
+        state.viewTotal      = cached.viewTotal;
+        state.viewQty        = cached.viewQty;
+        state.pendingRequest = nil;
+        return;
+    end
+
+    state.items          = {};
+    state.pendingRequest = 'ebox_category';
     sendGetCategory(ahCat);
 end
 
@@ -534,29 +604,67 @@ end
 ------------------------------------------------------------
 -- Tab activation
 ------------------------------------------------------------
-local function onTabActivated(tab)
-    state.activeTab = tab;
-    if tab == TAB_EBOX then
-        if not state.isCrystalWarrior then return; end
-        if state.searchActive or state.currentCategory ~= nil then
-            refreshCurrentView();
+-- Cache-respecting variant of refreshCurrentView used by tab switches and
+-- window-open toggles. Only issues a packet if the relevant cache is stale.
+-- Falls through to refreshCurrentView semantics (force fetch) when cache
+-- is missing or expired.
+local function ensureCurrentView()
+    if state.activeTab == TAB_EBOX then
+        if state.searchActive and ui.searchBuf[1] ~= '' then
+            -- Search results aren't cached — always re-issue.
+            state.pendingRequest = 'ebox_search';
+            sendSearch(ui.searchBuf[1]);
+        elseif state.currentCategory ~= nil then
+            local cached = state.categoryCache[state.currentCategory];
+            if cached and cacheFresh(cached.fetchedAt, TTL.category) then
+                state.items          = cached.items;
+                state.viewTotal      = cached.viewTotal;
+                state.viewQty        = cached.viewQty;
+                state.pendingRequest = nil;
+                return;
+            end
+            state.items          = {};
+            state.pendingRequest = 'ebox_category';
+            sendGetCategory(state.currentCategory);
         else
+            if cacheFresh(state.fetchedAt.summary, TTL.summary) then
+                state.pendingRequest = nil;
+                return;
+            end
             state.pendingRequest = 'ebox_summary';
             sendGetSummary();
         end
-    elseif tab == TAB_CURRENCY then
+    elseif state.activeTab == TAB_CURRENCY then
+        if cacheFresh(state.fetchedAt.currency, TTL.currency) then
+            state.pendingRequest = nil;
+            return;
+        end
         state.pendingRequest = 'currency';
         state.currency       = {};
         sendGetCurrency();
-    elseif tab == TAB_POINTS then
+    elseif state.activeTab == TAB_POINTS then
+        if cacheFresh(state.fetchedAt.points, TTL.points) then
+            state.pendingRequest = nil;
+            return;
+        end
         state.pendingRequest = 'points';
         state.points         = {};
         sendGetPoints();
-    elseif tab == TAB_SQUIRE then
+    elseif state.activeTab == TAB_SQUIRE then
+        if cacheFresh(state.fetchedAt.squire, TTL.squire) then
+            state.pendingRequest = nil;
+            return;
+        end
         state.pendingRequest = 'squire';
         state.squire         = {};
         sendGetSquire();
     end
+end
+
+local function onTabActivated(tab)
+    state.activeTab = tab;
+    if tab == TAB_EBOX and not state.isCrystalWarrior then return; end
+    ensureCurrentView();
 end
 
 ------------------------------------------------------------
@@ -594,15 +702,31 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
     end
 
     if action == S2C.END_LIST then
-        if state.pendingRequest == 'currency'
-           or state.pendingRequest == 'points'
-           or state.pendingRequest == 'squire' then
-            if state.pendingRequest == 'currency' then state.currencyLoaded = true; end
-            if state.pendingRequest == 'points'   then state.pointsLoaded   = true; end
-            if state.pendingRequest == 'squire'   then state.squireLoaded   = true; end
+        local now = os.clock();
+        if state.pendingRequest == 'currency' then
+            state.currencyLoaded      = true;
+            state.fetchedAt.currency  = now;
+        elseif state.pendingRequest == 'points' then
+            state.pointsLoaded        = true;
+            state.fetchedAt.points    = now;
+        elseif state.pendingRequest == 'squire' then
+            state.squireLoaded        = true;
+            state.fetchedAt.squire    = now;
         else
             state.viewTotal = readU16(e.data_modified, 0x08);
             state.viewQty   = readU32(e.data_modified, 0x0C);
+
+            -- Cache the newly-streamed items for this category so future
+            -- drill-downs within the TTL don't need to hit the server.
+            -- Search results are intentionally not cached.
+            if state.pendingRequest == 'ebox_category' and state.currentCategory ~= nil then
+                state.categoryCache[state.currentCategory] = {
+                    fetchedAt = now,
+                    items     = state.items,
+                    viewTotal = state.viewTotal,
+                    viewQty   = state.viewQty,
+                };
+            end
         end
         state.pendingRequest = nil;
         return;
@@ -636,11 +760,12 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
             end
         end);
 
-        state.summary      = entries;
-        state.summaryTotal = totalItems;
-        state.summaryQty   = totalQty;
-        state.isLocked     = false;
-        state.pendingRequest = nil;
+        state.summary          = entries;
+        state.summaryTotal     = totalItems;
+        state.summaryQty       = totalQty;
+        state.isLocked         = false;
+        state.pendingRequest   = nil;
+        state.fetchedAt.summary = os.clock();
         -- Confirmed CW since we got a summary back
         state.isCrystalWarrior = true;
         state.cwChecked        = true;
@@ -705,6 +830,10 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
         end
 
         if success == 1 and requestAction == C2S.WITHDRAW then
+            -- Withdraw changed ebox state on the server. Invalidate the ebox
+            -- caches so the scheduled refresh actually hits the server and
+            -- reconciles the new quantities.
+            invalidateEbox();
             ashita.tasks.once(0.8, function()
                 refreshCurrentView();
                 if state.currentCategory ~= nil or state.searchActive then
@@ -1751,6 +1880,9 @@ end
 -- Commands
 ------------------------------------------------------------
 local function scheduleRefresh()
+    -- Any ebox-touching command may have changed the stored quantities;
+    -- drop the ebox caches so the queued refresh actually hits the server.
+    invalidateEbox();
     ashita.tasks.once(1.0, function()
         if ui.isOpen[1] then
             refreshCurrentView();
@@ -1759,6 +1891,17 @@ local function scheduleRefresh()
             end
         end
     end);
+end
+
+-- Drop every cached panel and re-issue the active tab's request. Used by
+-- `/trove refresh` for the "I want live data right now" case.
+local function refreshAll()
+    invalidateSummary();
+    invalidateCategories();
+    invalidateCurrency();
+    invalidatePoints();
+    invalidateSquire();
+    refreshCurrentView();
 end
 
 ashita.events.register('command', 'trove_command', function(e)
@@ -1778,17 +1921,20 @@ ashita.events.register('command', 'trove_command', function(e)
 
     if #args == 1 then
         ui.isOpen[1] = not ui.isOpen[1];
-        if ui.isOpen[1] then refreshCurrentView(); end
+        if ui.isOpen[1] then ensureCurrentView(); end
         return;
     end
 
     local sub = args[2]:lower();
     if sub == 'show' then
         ui.isOpen[1] = true;
-        refreshCurrentView();
+        ensureCurrentView();
         return;
     elseif sub == 'hide' then
         ui.isOpen[1] = false;
+        return;
+    elseif sub == 'refresh' then
+        refreshAll();
         return;
     end
 
