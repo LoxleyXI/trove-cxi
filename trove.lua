@@ -270,15 +270,19 @@ local function replaceElementGlyphs(s)
     return table.concat(out);
 end
 
+-- Reusable FFI buffers for ShiftJIS → UTF-8 conversion. Previously these
+-- were allocated inside shiftjis_to_utf8 (12 KB per call, every tooltip
+-- frame at 60 fps → heavy GC pressure and eventual OOM after hours).
+local sjis_buf  = ffi.new('char[4096]');
+local sjis_wbuf = ffi.new('wchar_t[4096]');
+
 local function shiftjis_to_utf8(input)
     if input == nil then return nil; end
     input = replaceElementGlyphs(input);
-    local buf  = ffi.new('char[4096]');
-    ffi.copy(buf, input);
-    local wbuf = ffi.new('wchar_t[4096]');
-    ffi.C.MultiByteToWideChar(932, 0, buf, -1, wbuf, 4096);
-    ffi.C.WideCharToMultiByte(65001, 0, wbuf, -1, buf, 4096, nil, nil);
-    return ffi.string(buf);
+    ffi.copy(sjis_buf, input);
+    ffi.C.MultiByteToWideChar(932, 0, sjis_buf, -1, sjis_wbuf, 4096);
+    ffi.C.WideCharToMultiByte(65001, 0, sjis_wbuf, -1, sjis_buf, 4096, nil, nil);
+    return ffi.string(sjis_buf);
 end
 
 local function getItemString(res, field, index)
@@ -371,8 +375,9 @@ end
 ------------------------------------------------------------
 -- Texture cache (game item icons + file-based images)
 ------------------------------------------------------------
-local textureCache = {};
-local fileTextures = {};  -- filename -> texture
+local textureCache   = {};
+local fileTextures   = {};  -- filename -> texture
+local textureHandles = {};  -- itemId|filename -> tonumber(uint32) for imgui.Image
 
 local function loadItemTexture(itemId)
     if textureCache[itemId] ~= nil then return textureCache[itemId]; end
@@ -393,6 +398,7 @@ local function loadItemTexture(itemId)
 
     local tex = d3d.gc_safe_release(ffi.cast('IDirect3DTexture8*', ptr[0]));
     textureCache[itemId] = tex;
+    textureHandles[itemId] = tonumber(ffi.cast('uint32_t', tex));
     return tex;
 end
 
@@ -404,9 +410,13 @@ local function loadFileTexture(filename)
         fileTextures[filename] = false;
         return false;
     end
-    local tex = ffi.new('IDirect3DTexture8*', ptr[0]);
-    d3d.gc_safe_release(tex);
+    -- CRITICAL: store the gc_safe_release return value, not the raw pointer.
+    -- Previously the wrapper was created then discarded — when GC collected
+    -- it, Release() was called on the D3D texture while the addon still held
+    -- a dangling raw pointer. Next render → use-after-free → crash.
+    local tex = d3d.gc_safe_release(ffi.cast('IDirect3DTexture8*', ptr[0]));
     fileTextures[filename] = tex;
+    textureHandles[filename] = tonumber(ffi.cast('uint32_t', tex));
     return tex;
 end
 
@@ -1045,7 +1055,7 @@ end
 local function renderIcon(itemId, size)
     local tex = loadItemTexture(itemId);
     if tex and tex ~= false then
-        imgui.Image(tonumber(ffi.cast('uint32_t', tex)), { size, size });
+        imgui.Image(textureHandles[itemId], { size, size });
         return true;
     end
     return false;
@@ -1153,7 +1163,7 @@ local function renderTooltip(item)
 
     local tex = loadItemTexture(item.id);
     if tex and tex ~= false then
-        imgui.Image(tonumber(ffi.cast('uint32_t', tex)), { 32, 32 });
+        imgui.Image(textureHandles[item.id], { 32, 32 });
         imgui.SameLine();
     end
 
@@ -1520,7 +1530,7 @@ local function renderEboxTab()
     -- Crystal Warrior insignia in the top-left, inline with the action buttons
     local cwTex = loadFileTexture('cw.png');
     if cwTex and cwTex ~= false then
-        imgui.Image(tonumber(ffi.cast('uint32_t', cwTex)), { 20, 20 });
+        imgui.Image(textureHandles['cw.png'], { 20, 20 });
         imgui.SameLine(0, 6);
     end
 
@@ -2147,8 +2157,9 @@ end);
 
 ashita.events.register('unload', 'trove_unload', function()
     AshitaCore:GetChatManager():QueueCommand(1, string.format('/unbind %s', KEYBIND));
-    textureCache = {};
-    fileTextures = {};
+    textureCache   = {};
+    fileTextures   = {};
+    textureHandles = {};
     print('[trove] Unloaded.');
 end);
 
