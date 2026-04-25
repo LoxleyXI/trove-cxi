@@ -805,6 +805,10 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
     if e.id ~= PACKET_ID then return; end
     e.blocked = true;
 
+    -- pcall the handler body so a Lua error inside can't escalate to a
+    -- C++ "unknown exception" that tears down the whole addon system.
+    local ok, err = pcall(function()
+
     local action = struct.unpack('B', e.data_modified, 0x04 + 1);
 
     if action == S2C.CLEAR then
@@ -996,6 +1000,8 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
         state.pendingRequest = nil;
         return;
     end
+
+    end); -- pcall
 end);
 
 ------------------------------------------------------------
@@ -1054,8 +1060,9 @@ end
 ------------------------------------------------------------
 local function renderIcon(itemId, size)
     local tex = loadItemTexture(itemId);
-    if tex and tex ~= false then
-        imgui.Image(textureHandles[itemId], { size, size });
+    local handle = textureHandles[itemId];
+    if tex and tex ~= false and handle ~= nil then
+        imgui.Image(handle, { size, size });
         return true;
     end
     return false;
@@ -1162,8 +1169,9 @@ local function renderTooltip(item)
     imgui.PushTextWrapPos(380);
 
     local tex = loadItemTexture(item.id);
-    if tex and tex ~= false then
-        imgui.Image(textureHandles[item.id], { 32, 32 });
+    local handle = textureHandles[item.id];
+    if tex and tex ~= false and handle ~= nil then
+        imgui.Image(handle, { 32, 32 });
         imgui.SameLine();
     end
 
@@ -1529,8 +1537,9 @@ local function renderEboxTab()
 
     -- Crystal Warrior insignia in the top-left, inline with the action buttons
     local cwTex = loadFileTexture('cw.png');
-    if cwTex and cwTex ~= false then
-        imgui.Image(textureHandles['cw.png'], { 20, 20 });
+    local cwHandle = textureHandles['cw.png'];
+    if cwTex and cwTex ~= false and cwHandle ~= nil then
+        imgui.Image(cwHandle, { 20, 20 });
         imgui.SameLine(0, 6);
     end
 
