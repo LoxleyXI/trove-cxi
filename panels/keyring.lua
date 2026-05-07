@@ -105,15 +105,6 @@ local function scanKeyring()
             if item.Id ~= 0 and item.Id ~= 65535 and item.Id == KEYRING_ID then
                 hasKeyring = true;
                 local extra = item.Extra;
-                -- Debug: dump first 8 bytes
-                local dbg = {};
-                for bi = 1, 8 do
-                    dbg[bi] = string.format('%02X', struct.unpack('B', extra, bi));
-                end
-                if not panel._dbgPrinted then
-                    print('[keyring] Extra bytes: ' .. table.concat(dbg, ' '));
-                    panel._dbgPrinted = true;
-                end
                 -- Read chest mask (bytes 0-3, little-endian)
                 local b0 = struct.unpack('B', extra, 1);
                 local b1 = struct.unpack('B', extra, 2);
