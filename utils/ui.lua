@@ -1,0 +1,232 @@
+--[[
+* trove/utils/ui.lua — UI helper library for Trove plugins
+*
+* Provides themed helper functions for common imgui patterns.
+* Plugins should use these instead of raw imgui + hardcoded colors.
+*
+* Usage:
+*     local ui = require('utils/ui');
+*     ui.header('Section Title');
+*     ui.text('Normal text');
+*     ui.colored('Important!', 'accent');
+*     if ui.button('Click Me', 'primary') then ... end
+*     ui.badge('Rare', 'rare', 'rareBg');
+*     ui.kv('Level', '75', 'dimmed', 'white');
+]]--
+
+local imgui = require('imgui');
+
+local ui = {};
+
+-- Active theme (set via ui.setTheme)
+local theme = nil;
+
+------------------------------------------------------------
+-- Theme management
+------------------------------------------------------------
+
+-- Load a theme by name from themes/ directory
+ui.loadTheme = function(name)
+    name = name or 'default';
+    local ok, result = pcall(function()
+        return require('themes/' .. name);
+    end);
+    if ok and type(result) == 'table' then
+        theme = result;
+        return true;
+    else
+        print(string.format('[trove] Failed to load theme "%s": %s', name, tostring(result)));
+        return false;
+    end
+end
+
+-- Set theme directly from a table
+ui.setTheme = function(t)
+    theme = t;
+end
+
+-- Get a color from the theme by name. Returns white if not found.
+ui.color = function(name)
+    if theme and theme[name] then return theme[name]; end
+    return { 1.0, 1.0, 1.0, 1.0 };
+end
+
+-- Get the full theme table (for plugins that need direct access)
+ui.getTheme = function()
+    return theme;
+end
+
+------------------------------------------------------------
+-- Text helpers
+------------------------------------------------------------
+
+-- Themed colored text
+ui.colored = function(text, colorName)
+    imgui.TextColored(ui.color(colorName), text);
+end
+
+-- Plain text (uses imgui default color)
+ui.text = function(text)
+    imgui.Text(text);
+end
+
+-- Header text (bold-colored, with optional separator after)
+ui.header = function(text, separator)
+    imgui.TextColored(ui.color('header'), text);
+    if separator ~= false then
+        imgui.Separator();
+    end
+end
+
+-- Subheader (accent colored, no separator by default)
+ui.subheader = function(text)
+    imgui.TextColored(ui.color('accent'), text);
+end
+
+-- Dimmed text (secondary info)
+ui.dim = function(text)
+    imgui.TextColored(ui.color('dimmed'), text);
+end
+
+-- Key-value pair on one line: "Key: Value"
+ui.kv = function(key, value, keyColor, valueColor)
+    imgui.TextColored(ui.color(keyColor or 'dimmed'), key);
+    imgui.SameLine(0, 4);
+    imgui.TextColored(ui.color(valueColor or 'white'), tostring(value));
+end
+
+-- Status message (green for ok, red for error, yellow for warning)
+ui.status = function(text, level)
+    local color = 'statusOk';
+    if level == 'error' or level == 'err' then color = 'statusErr'; end
+    if level == 'warning' or level == 'warn' then color = 'statusWarn'; end
+    imgui.TextColored(ui.color(color), text);
+end
+
+------------------------------------------------------------
+-- Badge / tag helpers
+------------------------------------------------------------
+
+-- Colored badge: small colored text block (e.g. "Rare", "Ex", "Aug")
+ui.badge = function(text, fgColor, bgColor)
+    if bgColor then
+        local pos = imgui.GetCursorScreenPos();
+        local textSize = imgui.CalcTextSize(text);
+        local padding = 4;
+        local dl = imgui.GetWindowDrawList();
+        local bg = ui.color(bgColor);
+        local bgU32 = imgui.ColorConvertFloat4ToU32(bg);
+        dl:AddRectFilled(
+            { pos[1] - 2, pos[2] - 1 },
+            { pos[1] + textSize[1] + padding, pos[2] + textSize[2] + 1 },
+            bgU32, 2.0
+        );
+    end
+    imgui.TextColored(ui.color(fgColor or 'white'), text);
+end
+
+-- Inline badge (SameLine before it, for use after other text)
+ui.inlineBadge = function(text, fgColor, bgColor, spacing)
+    imgui.SameLine(0, spacing or 6);
+    ui.badge(text, fgColor, bgColor);
+end
+
+------------------------------------------------------------
+-- Button helpers
+------------------------------------------------------------
+
+-- Themed button. style = 'primary', 'feature', 'positive', 'back', or nil for default.
+-- Returns true if clicked.
+ui.button = function(label, style, size)
+    local colors = {};
+    if style == 'primary' then
+        colors = { 'btnPrimary', 'btnPrimaryHover', 'btnPrimaryActive' };
+    elseif style == 'feature' then
+        colors = { 'btnFeature', 'btnFeatureHover', 'btnFeatureActive' };
+    elseif style == 'positive' then
+        colors = { 'btnPositive', 'btnPositiveHover', 'btnPositiveActive' };
+    elseif style == 'back' then
+        colors = { 'btnBack', 'btnBackHover', 'btnBackActive' };
+    end
+
+    local pushed = 0;
+    if #colors == 3 then
+        imgui.PushStyleColor(ImGuiCol_Button, ui.color(colors[1]));
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, ui.color(colors[2]));
+        imgui.PushStyleColor(ImGuiCol_ButtonActive, ui.color(colors[3]));
+        pushed = 3;
+    end
+
+    local clicked = imgui.Button(label, size or { 0, 0 });
+
+    if pushed > 0 then
+        imgui.PopStyleColor(pushed);
+    end
+
+    return clicked;
+end
+
+-- Disabled button (dimmed, not clickable)
+ui.buttonDisabled = function(label, size)
+    imgui.PushStyleColor(ImGuiCol_Button, ui.color('btnDimmed'));
+    imgui.PushStyleColor(ImGuiCol_ButtonHovered, ui.color('btnDimmed'));
+    imgui.PushStyleColor(ImGuiCol_ButtonActive, ui.color('btnDimmed'));
+    imgui.PushStyleColor(ImGuiCol_Text, ui.color('dimmed'));
+    imgui.Button(label, size or { 0, 0 });
+    imgui.PopStyleColor(4);
+end
+
+------------------------------------------------------------
+-- Layout helpers
+------------------------------------------------------------
+
+-- Push window style colors from theme
+ui.pushWindowStyle = function()
+    imgui.PushStyleColor(ImGuiCol_WindowBg, ui.color('windowBg'));
+    imgui.PushStyleColor(ImGuiCol_TitleBg, ui.color('windowTitleBg'));
+    imgui.PushStyleColor(ImGuiCol_TitleBgActive, ui.color('windowTitleBgAct'));
+    imgui.PushStyleColor(ImGuiCol_Border, ui.color('windowBorder'));
+    imgui.PushStyleColor(ImGuiCol_ChildBg, ui.color('childBg'));
+    return 5; -- number of colors pushed (for PopStyleColor)
+end
+
+-- Pop window style colors
+ui.popWindowStyle = function(count)
+    imgui.PopStyleColor(count or 5);
+end
+
+-- Separator with spacing
+ui.separator = function()
+    imgui.Spacing();
+    imgui.Separator();
+    imgui.Spacing();
+end
+
+-- Indent block helper
+ui.indent = function(fn, amount)
+    imgui.Indent(amount or 8);
+    fn();
+    imgui.Unindent(amount or 8);
+end
+
+-- Tooltip wrapper: call inside IsItemHovered check
+ui.tooltip = function(fn)
+    imgui.PushStyleColor(ImGuiCol_PopupBg, ui.color('tooltipBg'));
+    imgui.BeginTooltip();
+    fn();
+    imgui.EndTooltip();
+    imgui.PopStyleColor(1);
+end
+
+------------------------------------------------------------
+-- Convenience: push/pop a single text color
+------------------------------------------------------------
+ui.pushColor = function(colorName)
+    imgui.PushStyleColor(ImGuiCol_Text, ui.color(colorName));
+end
+
+ui.popColor = function(count)
+    imgui.PopStyleColor(count or 1);
+end
+
+return ui;
