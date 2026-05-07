@@ -38,7 +38,9 @@ ffi.cdef[[
 ------------------------------------------------------------
 -- Sub-panels
 ------------------------------------------------------------
-local trove_vnm = require('trove_vnm');
+local trove_vnm      = require('panels/vnm');
+local trove_keyring  = require('panels/keyring');
+local trove_garrison = require('panels/garrison');
 
 ------------------------------------------------------------
 -- Packet protocol (0x1A4)
@@ -1254,9 +1256,13 @@ local function renderIcon(itemId, size)
     return false;
 end
 
--- Inject shared functions into VNM sub-panel
-trove_vnm.renderIcon = renderIcon;
-trove_vnm.getItemRes = getItemRes;
+-- Inject shared functions into sub-panels
+trove_vnm.renderIcon      = renderIcon;
+trove_vnm.getItemRes      = getItemRes;
+trove_keyring.renderIcon   = renderIcon;
+trove_keyring.getItemRes   = getItemRes;
+trove_garrison.renderIcon  = renderIcon;
+trove_garrison.getItemRes  = getItemRes;
 
 local function renderBadges(flags)
     if flags == nil or flags == 0 then return; end
@@ -2779,13 +2785,28 @@ local function renderWindow()
             imgui.OpenPopup('##trove_panels');
         end
         if imgui.BeginPopup('##trove_panels') then
-            renderIcon(3045, 16); -- Forest Crest icon
+            renderIcon(3045, 16);
             imgui.SameLine(0, 6);
             local vnmLabel = 'VNM Armor';
             if trove_vnm.hasAlert() then vnmLabel = 'VNM Armor (!)'; end
             if imgui.Selectable(vnmLabel, trove_vnm.isOpen[1]) then
                 trove_vnm.isOpen[1] = not trove_vnm.isOpen[1];
             end
+
+            if state.isCrystalWarrior then
+                renderIcon(3003, 16);
+                imgui.SameLine(0, 6);
+                if imgui.Selectable('Keyring', trove_keyring.isOpen[1]) then
+                    trove_keyring.isOpen[1] = not trove_keyring.isOpen[1];
+                end
+
+                renderIcon(3002, 16);
+                imgui.SameLine(0, 6);
+                if imgui.Selectable('Garrison Pass', trove_garrison.isOpen[1]) then
+                    trove_garrison.isOpen[1] = not trove_garrison.isOpen[1];
+                end
+            end
+
             imgui.EndPopup();
         end
     end
@@ -2794,6 +2815,8 @@ local function renderWindow()
 
     -- Render sub-panel windows
     trove_vnm.render();
+    trove_keyring.render();
+    trove_garrison.render();
 end
 
 ------------------------------------------------------------
