@@ -35,12 +35,14 @@ ffi.cdef[[
     HRESULT __stdcall D3DXCreateTextureFromFileA(IDirect3DDevice8* pDevice, const char* pSrcFile, IDirect3DTexture8** ppTexture);
 ]];
 
+local trove_plugins  = require('utils/plugins');
+local trove_ui       = require('utils/ui');
+
 ------------------------------------------------------------
--- Sub-panels
+-- Theme (change to load a custom theme from themes/)
 ------------------------------------------------------------
-local trove_vnm      = require('panels/vnm');
-local trove_keyring  = require('panels/keyring');
-local trove_garrison = require('panels/garrison');
+local THEME = 'default';
+trove_ui.loadTheme(THEME);
 
 ------------------------------------------------------------
 -- Packet protocol (0x1A4)
@@ -912,6 +914,10 @@ ashita.events.register('packet_in', 'trove_inv_watch', function(e)
     end
 end);
 
+ashita.events.register('packet_in', 'trove_plugin_packets', function(e)
+    trove_plugins.onPacketIn(e, state);
+end);
+
 ashita.events.register('packet_in', 'trove_packet_in', function(e)
     if e.id ~= PACKET_ID then return; end
     e.blocked = true;
@@ -1256,13 +1262,10 @@ local function renderIcon(itemId, size)
     return false;
 end
 
--- Inject shared functions into sub-panels
-trove_vnm.renderIcon      = renderIcon;
-trove_vnm.getItemRes      = getItemRes;
-trove_keyring.renderIcon   = renderIcon;
-trove_keyring.getItemRes   = getItemRes;
-trove_garrison.renderIcon  = renderIcon;
-trove_garrison.getItemRes  = getItemRes;
+-- Inject shared functions into plugins after they load
+local function initPlugins()
+    trove_plugins.initAll(renderIcon, getItemRes);
+end
 
 local function renderBadges(flags)
     if flags == nil or flags == 0 then return; end
@@ -2775,35 +2778,44 @@ local function renderWindow()
                 imgui.EndTabItem();
             end
 
+            -- Plugin tabs (rendered after built-in tabs)
+            trove_plugins.renderTabs(state);
+
             imgui.EndTabBar();
         end
 
         -- Burger menu button (absolute positioned top-right, above tab content)
-        local btnLabel = trove_vnm.hasAlert() and '(!)'or '=';
+        local btnLabel = trove_plugins.hasAlert() and '(!)'or '=';
         imgui.SetCursorPos({ imgui.GetWindowWidth() - 28, 34 });
         if imgui.SmallButton(btnLabel) then
             imgui.OpenPopup('##trove_panels');
         end
         if imgui.BeginPopup('##trove_panels') then
-            renderIcon(3045, 16);
-            imgui.SameLine(0, 6);
-            local vnmLabel = 'VNM Armor';
-            if trove_vnm.hasAlert() then vnmLabel = 'VNM Armor (!)'; end
-            if imgui.Selectable(vnmLabel, trove_vnm.isOpen[1]) then
-                trove_vnm.isOpen[1] = not trove_vnm.isOpen[1];
+            -- Render window toggles from plugins
+            local winPlugins = trove_plugins.getWindowPlugins();
+            for _, plugin in ipairs(winPlugins) do
+                local win = plugin.window;
+                -- Skip CW-only windows if not a Crystal Warrior
+                if win.cwOnly and not state.isCrystalWarrior then
+                    -- skip
+                else
+                    if win.icon then renderIcon(win.icon, 16); imgui.SameLine(0, 6); end
+                    local label = win.label or plugin.name;
+                    if plugin.hasAlert and plugin.hasAlert() then label = label .. ' (!)'; end
+                    if imgui.Selectable(label, win.isOpen[1]) then
+                        win.isOpen[1] = not win.isOpen[1];
+                    end
+                end
             end
 
-            if state.isCrystalWarrior then
-                renderIcon(3003, 16);
-                imgui.SameLine(0, 6);
-                if imgui.Selectable('Keyring', trove_keyring.isOpen[1]) then
-                    trove_keyring.isOpen[1] = not trove_keyring.isOpen[1];
-                end
-
-                renderIcon(3002, 16);
-                imgui.SameLine(0, 6);
-                if imgui.Selectable('Garrison Pass', trove_garrison.isOpen[1]) then
-                    trove_garrison.isOpen[1] = not trove_garrison.isOpen[1];
+            -- Render plugin menu actions
+            local menuEntries = trove_plugins.getMenuEntries();
+            if #menuEntries > 0 and #winPlugins > 0 then
+                imgui.Separator();
+            end
+            for _, entry in ipairs(menuEntries) do
+                if imgui.Selectable(entry.label) then
+                    entry.action(state);
                 end
             end
 
@@ -2813,10 +2825,8 @@ local function renderWindow()
     imgui.End();
     imgui.PopStyleColor(14);
 
-    -- Render sub-panel windows
-    trove_vnm.render();
-    trove_keyring.render();
-    trove_garrison.render();
+    -- Render plugin floating windows
+    trove_plugins.renderWindows();
 end
 
 ------------------------------------------------------------
@@ -2863,6 +2873,10 @@ local function refreshAll()
     refreshCurrentView();
 end
 
+------------------------------------------------------------
+-- Export (loaded at top of file, see utils/export.lua)
+------------------------------------------------------------
+
 ashita.events.register('command', 'trove_command', function(e)
     local args = e.command:args();
     if #args == 0 then return; end
@@ -2895,9 +2909,6 @@ ashita.events.register('command', 'trove_command', function(e)
     elseif sub == 'refresh' then
         refreshAll();
         return;
-    elseif sub == 'vnm' then
-        trove_vnm.isOpen[1] = not trove_vnm.isOpen[1];
-        return;
     elseif sub == 'dump' and args[3] ~= nil then
         -- Dump raw bytes of an item's description so we can map the custom
         -- glyph sequences FFXI uses for elemental icons, etc. Usage:
@@ -2927,6 +2938,9 @@ ashita.events.register('command', 'trove_command', function(e)
         return;
     end
 
+    -- Try plugin commands first
+    if (trove_plugins.handleCommand(sub, state, args)) then return; end
+
     -- Passthrough to !box
     local parts = {};
     for i = 2, #args do table.insert(parts, args[i]); end
@@ -2942,6 +2956,8 @@ ashita.events.register('d3d_present', 'trove_render', function()
     if not ui.keybindDone then
         ui.keybindDone = true;
         AshitaCore:GetChatManager():QueueCommand(1, string.format('/bind %s /trove', KEYBIND));
+        trove_plugins.load();
+        initPlugins();
     end
 
     if ui.isOpen[1] then processSearchDebounce(); end
@@ -2959,48 +2975,12 @@ ashita.events.register('d3d_present', 'trove_render', function()
         end
     end
 
+    trove_plugins.onRender(state);
     renderWindow();
 end);
 
-------------------------------------------------------------
--- VNM chat monitoring (Populox + Active Venture Seals)
-------------------------------------------------------------
-ashita.events.register('packet_in', 'trove_vnm_chat', function(e)
-    if e.id == 0x0A or e.id == 0x0B then
-        trove_vnm.clearAlerts();
-        return;
-    end
-
-    if e.id ~= 0x17 then return; end
-
-    local chatType = struct.unpack('B', e.data_modified, 0x04 + 1);
-
-    local sender = '';
-    for i = 0x08, 0x16 do
-        local b = struct.unpack('B', e.data_modified, i + 1);
-        if b == 0 then break; end
-        sender = sender .. string.char(b);
-    end
-
-    local msg = '';
-    for i = 0x17, #e.data_modified - 1 do
-        local b = struct.unpack('B', e.data_modified, i + 1);
-        if b == 0 then break; end
-        msg = msg .. string.char(b);
-    end
-
-    if sender == 'Populox' and chatType == 0x21 and msg:find('/') then
-        trove_vnm.processPopuloxMessage(msg);
-        return;
-    end
-
-    local sealsMsg = msg:match('Active Venture Seals:%s*(.+)');
-    if sealsMsg and sealsMsg:find('/') then
-        trove_vnm.processPopuloxMessage(sealsMsg);
-    end
-end);
-
 ashita.events.register('unload', 'trove_unload', function()
+    trove_plugins.unload();
     AshitaCore:GetChatManager():QueueCommand(1, string.format('/unbind %s', KEYBIND));
     textureCache   = {};
     fileTextures   = {};
