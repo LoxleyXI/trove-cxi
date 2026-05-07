@@ -67,7 +67,7 @@ local function scanPass()
     if inventory == nil then return; end
     for _, c in ipairs(CONTAINERS) do
         local max = inventory:GetContainerCountMax(c.id);
-        if max == nil or max == 0 then break; end
+        if max ~= nil and max > 0 then
         for j = 0, max do
             local ok, item = pcall(function() return inventory:GetContainerItem(c.id, j); end);
             if not ok or item == nil then break; end
@@ -82,6 +82,7 @@ local function scanPass()
                 return;
             end
         end
+        end -- max check
     end
 end
 

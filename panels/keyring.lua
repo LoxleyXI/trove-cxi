@@ -98,20 +98,18 @@ local function scanKeyring()
     if inventory == nil then return; end
     for _, c in ipairs(CONTAINERS) do
         local max = inventory:GetContainerCountMax(c.id);
-        if max == nil or max == 0 then break; end
+        if max ~= nil and max > 0 then
         for j = 0, max do
             local ok, item = pcall(function() return inventory:GetContainerItem(c.id, j); end);
             if not ok or item == nil then break; end
             if item.Id ~= 0 and item.Id ~= 65535 and item.Id == KEYRING_ID then
                 hasKeyring = true;
                 local extra = item.Extra;
-                -- Read chest mask (bytes 0-3, little-endian)
                 local b0 = struct.unpack('B', extra, 1);
                 local b1 = struct.unpack('B', extra, 2);
                 local b2 = struct.unpack('B', extra, 3);
                 local b3 = struct.unpack('B', extra, 4);
                 chestMask = b0 + b1 * 256 + b2 * 65536 + b3 * 16777216;
-                -- Read coffer mask (bytes 4-7, little-endian)
                 local c0 = struct.unpack('B', extra, 5);
                 local c1 = struct.unpack('B', extra, 6);
                 local c2 = struct.unpack('B', extra, 7);
@@ -120,6 +118,7 @@ local function scanKeyring()
                 return;
             end
         end
+        end -- max check
     end
 end
 

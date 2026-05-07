@@ -235,7 +235,7 @@ local function scanInventory()
     if inventory == nil then return; end
     for _, container in ipairs(CONTAINERS) do
         local max = inventory:GetContainerCountMax(container.id);
-        if max == nil or max == 0 then break; end
+        if max ~= nil and max > 0 then
         for j = 0, max do
             local ok, item = pcall(function() return inventory:GetContainerItem(container.id, j); end);
             if not ok or item == nil then break; end
@@ -257,6 +257,7 @@ local function scanInventory()
                 end
             end
         end
+        end -- max check
     end
     owned = newOwned;
 end
