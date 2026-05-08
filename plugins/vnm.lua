@@ -318,14 +318,21 @@ local CREST_ITEM_IDS = {
     Mountain = 3047, Forest = 3045, Desert = 3049, Ocean = 3046, Tundra = 3050,
 };
 
--- Cell background colors (derived from theme)
+-- Cell background colors (cached, rebuilt on theme change)
+local cellColorCache = nil;
+local cellColorVersion = -1;
+
 local function getCellColors()
+    local v = ui.getThemeVersion();
+    if cellColorCache and cellColorVersion == v then return cellColorCache; end
     local base = ui.color('childBg');
-    return {
-        ownedBg    = { 0.18, 0.38, 0.18, 1.0  },  -- green tint (always green for "owned")
-        completeBg = { 0.18, 0.28, 0.48, 1.0  },  -- blue tint (always blue for "complete")
+    cellColorCache = {
+        ownedBg    = { 0.18, 0.38, 0.18, 1.0  },
+        completeBg = { 0.18, 0.28, 0.48, 1.0  },
         cellBg     = { base[1], base[2], base[3], 1.0 },
     };
+    cellColorVersion = v;
+    return cellColorCache;
 end
 
 ------------------------------------------------------------

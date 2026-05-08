@@ -48,11 +48,19 @@ ui.getThemeName = function()
     return ui._themeName or 'default';
 end
 
+-- Theme version counter (increments on every theme change, plugins can use to invalidate caches)
+ui._themeVersion = 0;
+
+ui.getThemeVersion = function()
+    return ui._themeVersion;
+end
+
 -- Load and track theme name
 ui.applyTheme = function(name)
     name = name or 'default';
     if ui.loadTheme(name) then
         ui._themeName = name;
+        ui._themeVersion = ui._themeVersion + 1;
         return true;
     end
     return false;

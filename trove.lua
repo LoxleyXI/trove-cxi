@@ -20,7 +20,7 @@
 
 addon.name      = 'trove';
 addon.author    = 'Loxley';
-addon.version   = '1.4.0';
+addon.version   = '1.4.1';
 addon.desc      = 'Browse Ephemeral Box, Currency, Points, and Squire in-game';
 
 require('common');
@@ -139,6 +139,19 @@ local COLORS = setmetatable({}, {
         return trove_ui.color(themeKey);
     end,
 });
+
+-- Cached alternating row backgrounds (rebuilt on theme change to avoid per-row allocations)
+local rowBgCache = { version = -1, alt = nil, normal = nil };
+local function getRowBg(isAlt)
+    local v = trove_ui.getThemeVersion();
+    if rowBgCache.version ~= v then
+        local base = COLORS.childBg;
+        rowBgCache.alt    = { base[1], base[2], base[3], 0.35 };
+        rowBgCache.normal = { base[1], base[2], base[3], 0.20 };
+        rowBgCache.version = v;
+    end
+    return isAlt and rowBgCache.alt or rowBgCache.normal;
+end
 
 ------------------------------------------------------------
 -- Item flag constants
@@ -900,7 +913,12 @@ ashita.events.register('packet_in', 'trove_inv_watch', function(e)
 end);
 
 ashita.events.register('packet_in', 'trove_plugin_packets', function(e)
-    trove_plugins.onPacketIn(e, state);
+    if trove_plugins and trove_plugins.onPacketIn then
+        local ok, err = pcall(trove_plugins.onPacketIn, e, state);
+        if not ok then
+            print(string.format('[trove] Plugin packet error: %s', tostring(err)));
+        end
+    end
 end);
 
 ashita.events.register('packet_in', 'trove_packet_in', function(e)
@@ -1374,9 +1392,7 @@ local function renderItemRow(item, index)
     local isAlt      = (index % 2 == 0);
     local rowId      = string.format('##row_%d_%d', item.id, index);
 
-    local base = COLORS.childBg;
-    local bgColor = isSelected and COLORS.selected
-        or (isAlt and { base[1], base[2], base[3], 0.35 } or { base[1], base[2], base[3], 0.20 });
+    local bgColor = isSelected and COLORS.selected or getRowBg(isAlt);
 
     imgui.PushStyleColor(ImGuiCol_ChildBg, bgColor);
     imgui.BeginChild(rowId, { -1, 28 }, false);
@@ -1871,8 +1887,7 @@ local function renderCurrencyTab()
             for i, entry in ipairs(sections[sectionName]) do
                 local rowId = string.format('##currow_%s_%d', sectionName, i);
                 local isAlt = (i % 2 == 0);
-                local base = COLORS.childBg;
-            local bg = isAlt and { base[1], base[2], base[3], 0.35 } or { base[1], base[2], base[3], 0.20 };
+                local bg = getRowBg(isAlt);
 
                 imgui.PushStyleColor(ImGuiCol_ChildBg, bg);
                 imgui.BeginChild(rowId, { -1, 36 }, false);
@@ -1964,8 +1979,7 @@ local function renderPointsTab()
             for i, entry in ipairs(groups[groupName]) do
                 local rowId = string.format('##ptrow_%s_%d', groupName, i);
                 local isAlt = (i % 2 == 0);
-                local base = COLORS.childBg;
-            local bg = isAlt and { base[1], base[2], base[3], 0.35 } or { base[1], base[2], base[3], 0.20 };
+                local bg = getRowBg(isAlt);
 
                 imgui.PushStyleColor(ImGuiCol_ChildBg, bg);
                 imgui.BeginChild(rowId, { -1, 22 }, false);
@@ -2110,8 +2124,7 @@ local function renderSquireTab()
                     rowIdx = rowIdx + 1;
                     local rowId = string.format('##sqrow_%s_%d', catName, rowIdx);
                     local isAlt = (rowIdx % 2 == 0);
-                    local base = COLORS.childBg;
-            local bg = isAlt and { base[1], base[2], base[3], 0.35 } or { base[1], base[2], base[3], 0.20 };
+                    local bg = getRowBg(isAlt);
 
                     imgui.PushStyleColor(ImGuiCol_ChildBg, bg);
                     imgui.BeginChild(rowId, { -1, 28 }, false);
@@ -2674,8 +2687,7 @@ local function renderCraftingTab()
         for i, entry in ipairs(results) do
             local rowId = string.format('##craft_row_%d', entry.id);
             local isAlt = (i % 2 == 0);
-            local base = COLORS.childBg;
-            local bg = isAlt and { base[1], base[2], base[3], 0.35 } or { base[1], base[2], base[3], 0.20 };
+            local bg = getRowBg(isAlt);
 
             imgui.PushStyleColor(ImGuiCol_ChildBg, bg);
             imgui.BeginChild(rowId, { -1, 26 }, false);

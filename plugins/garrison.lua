@@ -92,13 +92,20 @@ end
 local ICON_SIZE = 32;
 local CELL_PAD  = 4;
 
--- Cell background colors (derived from theme)
+-- Cell background colors (cached, rebuilt on theme change)
+local cellColorCache = nil;
+local cellColorVersion = -1;
+
 local function getCellColors()
+    local v = ui.getThemeVersion();
+    if cellColorCache and cellColorVersion == v then return cellColorCache; end
     local base = ui.color('childBg');
-    return {
+    cellColorCache = {
         ownedBg = { 0.18, 0.38, 0.18, 1.0 },
         cellBg  = { base[1], base[2], base[3], 1.0 },
     };
+    cellColorVersion = v;
+    return cellColorCache;
 end
 
 ------------------------------------------------------------
