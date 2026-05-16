@@ -1149,12 +1149,11 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
             setStatus(message, true);
         end
 
-        if success == 1 and requestAction == C2S.WITHDRAW then
-            invalidateEbox();
-
-            -- Batch mode: count down and refresh recipe on last ACK.
+        if requestAction == C2S.WITHDRAW then
+            -- Batch mode: count down on any ACK (success or failure).
             if state.batchWithdrawCount > 0 then
                 state.batchWithdrawCount = state.batchWithdrawCount - 1;
+                if success == 1 then invalidateEbox(); end
                 if state.batchWithdrawCount == 0 and state.craftItemId > 0 then
                     ashita.tasks.once(0.8, function()
                         state.craftRecipes  = {};
@@ -1163,7 +1162,8 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
                         sendGetRecipe(state.craftItemId);
                     end);
                 end
-            else
+            elseif success == 1 then
+                invalidateEbox();
                 -- Normal single-withdraw refresh (E.Box tab).
                 ashita.tasks.once(0.8, function()
                     refreshCurrentView();
