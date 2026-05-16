@@ -2119,16 +2119,19 @@ local function renderSquireTab()
         imgui.Separator();
         imgui.Spacing();
 
-        for _, entry in ipairs(state.squireSummary) do
-            local label = string.format('%s (%d)', entry.category, entry.count);
-            if imgui.Selectable(label, false) then
+        imgui.BeginChild('##squire_summary', { -1, -1 }, false);
+        for i, entry in ipairs(state.squireSummary) do
+            local subtitle = string.format('%d item%s stored', entry.count, entry.count ~= 1 and 's' or '');
+            if trove_ui.categoryButton(entry.category, subtitle, i) then
                 state.squireCategory = entry.category;
                 state.squire = {};
                 state.squireLoaded = false;
                 state.pendingRequest = 'squire';
                 sendGetTabCategory(TAB_SOURCE.SQUIRE, entry.category);
             end
+            imgui.Spacing();
         end
+        imgui.EndChild();
         return;
     end
 

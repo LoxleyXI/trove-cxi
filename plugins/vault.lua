@@ -2,7 +2,7 @@
 * trove/plugins/vault.lua — Vault Browser
 *
 * Displays Mog Vault Deposit Boxes and Wardrobe contents.
-* Reads directly from client memory (no server packets needed).
+* Uses the generic tab protocol (TAB_SOURCE = 1).
 *
 * Command: /trove vault
 ]]--
@@ -17,169 +17,157 @@ local getItemRes = nil;
 local ui = nil;
 
 ------------------------------------------------------------
--- Vault container definitions
-------------------------------------------------------------
--- Deposit Boxes: location IDs 19-44 (A-Z)
--- Wardrobes:     location IDs 45-70 (A-Z)
-
-local DEPOSIT_BASE  = 19;
-local WARDROBE_BASE = 45;
-local MAX_VAULTS    = 26;
-
-local function buildContainers()
-    local deposits  = {};
-    local wardrobes = {};
-    for i = 0, MAX_VAULTS - 1 do
-        local letter = string.char(65 + i); -- A-Z
-        table.insert(deposits,  { id = DEPOSIT_BASE + i,  name = 'Deposit Box ' .. letter });
-        table.insert(wardrobes, { id = WARDROBE_BASE + i, name = 'Wardrobe ' .. letter });
-    end
-    return deposits, wardrobes;
-end
-
-local DEPOSITS, WARDROBES = buildContainers();
-
-------------------------------------------------------------
 -- State
 ------------------------------------------------------------
-local isOpen       = { false };
-local selectedCat  = nil;   -- nil = summary, else container table entry
-local items        = {};
-local lastScan     = 0;
-local SCAN_INTERVAL = 1;
+local isOpen          = { false };
+local selectedCat     = nil;    -- nil = summary, string = category name
+local summary         = {};
+local summaryLoaded   = false;
+local items           = {};
+local itemsLoaded     = false;
+local searchBuf       = { '' };
 
 ------------------------------------------------------------
--- Inventory reading (client-side memory)
+-- Protocol (matches trove.lua constants)
 ------------------------------------------------------------
-local function getContainerItems(containerId)
-    local inventory = AshitaCore:GetMemoryManager():GetInventory();
-    if inventory == nil then return {}; end
+local PACKET_ID       = 0x1A4;
+local C2S_TAB_SUMMARY  = 13;
+local C2S_TAB_CATEGORY = 14;
+local S2C_TAB_SUMMARY  = 12;
+local S2C_CLEAR        = 0;
+local S2C_SQUIRE_ENTRY = 8;
+local S2C_END_LIST     = 2;
+local TAB_SOURCE_VAULT = 1;
 
-    local max = inventory:GetContainerCountMax(containerId);
-    if max == nil or max == 0 then return {}; end
+local function makePacket()
+    local p = {};
+    for i = 1, 64 do p[i] = 0; end
+    return p;
+end
 
-    local result = {};
-    for j = 0, max do
-        local ok, item = pcall(function() return inventory:GetContainerItem(containerId, j); end);
-        if not ok or item == nil then break; end
-        if item.Id ~= 0 and item.Id ~= 65535 then
-            table.insert(result, {
-                id       = item.Id,
-                count    = item.Count or 1,
-                slot     = j,
-            });
-        end
+local function sendVaultSummary()
+    local p = makePacket();
+    p[5] = C2S_TAB_SUMMARY;
+    p[7] = TAB_SOURCE_VAULT;
+    AshitaCore:GetPacketManager():AddOutgoingPacket(PACKET_ID, p);
+end
+
+local function sendVaultCategory(categoryName)
+    local p = makePacket();
+    p[5] = C2S_TAB_CATEGORY;
+    p[7] = TAB_SOURCE_VAULT;
+    local bytes = { string.byte(categoryName, 1, 20) };
+    for i = 1, math.min(#bytes, 20) do p[8 + i] = bytes[i]; end
+    AshitaCore:GetPacketManager():AddOutgoingPacket(PACKET_ID, p);
+end
+
+------------------------------------------------------------
+-- Packet reading helpers
+------------------------------------------------------------
+local function readU16(data, offset)
+    local lo = struct.unpack('B', data, offset + 1);
+    local hi = struct.unpack('B', data, offset + 2);
+    return lo + hi * 256;
+end
+
+local function readString(data, offset, maxLen)
+    local s = '';
+    for i = 0, maxLen - 1 do
+        local b = struct.unpack('B', data, offset + i + 1);
+        if b == 0 then break; end
+        s = s .. string.char(b);
     end
-    return result;
-end
-
-local function getContainerCount(containerId)
-    local inventory = AshitaCore:GetMemoryManager():GetInventory();
-    if inventory == nil then return 0; end
-
-    local max = inventory:GetContainerCountMax(containerId);
-    if max == nil or max == 0 then return 0; end
-
-    local count = 0;
-    for j = 0, max do
-        local ok, item = pcall(function() return inventory:GetContainerItem(containerId, j); end);
-        if not ok or item == nil then break; end
-        if item.Id ~= 0 and item.Id ~= 65535 then
-            count = count + 1;
-        end
-    end
-    return count;
-end
-
--- Check which vaults are accessible (non-zero max capacity)
-local function isContainerAccessible(containerId)
-    local inventory = AshitaCore:GetMemoryManager():GetInventory();
-    if inventory == nil then return false; end
-    local max = inventory:GetContainerCountMax(containerId);
-    return max ~= nil and max > 0;
+    return s;
 end
 
 ------------------------------------------------------------
--- Render: Summary view (category list)
+-- Render: Summary view
 ------------------------------------------------------------
 local function renderSummary()
-    local hasAny = false;
+    if summaryLoaded ~= true then
+        ui.dim('Loading...');
+        return;
+    end
 
-    -- Deposit Boxes
-    for _, box in ipairs(DEPOSITS) do
-        if isContainerAccessible(box.id) then
-            hasAny = true;
-            local count = getContainerCount(box.id);
-            local label = string.format('%s (%d)', box.name, count);
-            if imgui.Selectable(label, false) then
-                selectedCat = box;
-                items = getContainerItems(box.id);
-            end
+    if #summary == 0 then
+        ui.dim('No vault containers unlocked.');
+        return;
+    end
+
+    -- Refresh button
+    if ui.button('Refresh', 60, 22) then
+        summaryLoaded = false;
+        sendVaultSummary();
+    end
+    imgui.Separator();
+    imgui.Spacing();
+
+    imgui.BeginChild('##vault_summary', { -1, -1 }, false);
+    for i, entry in ipairs(summary) do
+        local subtitle = string.format('%d item%s stored', entry.count, entry.count ~= 1 and 's' or '');
+        if ui.categoryButton(entry.category, subtitle, i) then
+            selectedCat = entry.category;
+            items = {};
+            itemsLoaded = false;
+            searchBuf = { '' };
+            sendVaultCategory(entry.category);
         end
+        imgui.Spacing();
     end
-
-    -- Separator between deposits and wardrobes
-    local hasDeposits = hasAny;
-    local hasWardrobes = false;
-
-    for _, wr in ipairs(WARDROBES) do
-        if isContainerAccessible(wr.id) then
-            if not hasWardrobes and hasDeposits then
-                imgui.Spacing();
-                imgui.Separator();
-                imgui.Spacing();
-            end
-            hasWardrobes = true;
-            hasAny = true;
-            local count = getContainerCount(wr.id);
-            local label = string.format('%s (%d)', wr.name, count);
-            if imgui.Selectable(label, false) then
-                selectedCat = wr;
-                items = getContainerItems(wr.id);
-            end
-        end
-    end
-
-    if not hasAny then
-        ui.dim('No vault containers available.');
-    end
+    imgui.EndChild();
 end
 
 ------------------------------------------------------------
 -- Render: Item list view
 ------------------------------------------------------------
 local function renderItems()
-    -- Back button
-    if ui.button('Back', 50, 22) then
+    if ui.button('< Back', 55, 22) then
         selectedCat = nil;
         items = {};
+        itemsLoaded = false;
+        searchBuf = { '' };
         return;
     end
     imgui.SameLine();
-    ui.dim(string.format('%s (%d items)', selectedCat.name, #items));
+    ui.colored(selectedCat, 'header');
+    imgui.SameLine();
+    ui.dim(string.format('(%d)', #items));
     imgui.Separator();
     imgui.Spacing();
+
+    if not itemsLoaded then
+        ui.dim('Loading...');
+        return;
+    end
 
     if #items == 0 then
         ui.dim('Empty.');
         return;
     end
 
+    -- Search filter
+    imgui.PushItemWidth(-1);
+    imgui.InputText('##vault_search', searchBuf, 256);
+    imgui.PopItemWidth();
+    imgui.Spacing();
+
+    local filter = searchBuf[1]:lower();
+
+    imgui.BeginChild('##vault_items', { -1, -1 }, false);
+    local idx = 0;
     for _, item in ipairs(items) do
-        local res = getItemRes(item.id);
-        local name = res and res.Name[1] or string.format('Item %d', item.id);
-
-        if res then
-            renderIcon(item.id, 22);
-            imgui.SameLine();
-        end
-
-        if item.count > 1 then
-            imgui.Text(string.format('%s x%d', name, item.count));
-        else
-            imgui.Text(name);
+        local res = getItemRes(item.iconId);
+        local name = (res and res.Name and res.Name[1]) or item.name or '???';
+        if filter == '' or name:lower():find(filter, 1, true) then
+            idx = idx + 1;
+            ui.itemRow(renderIcon, getItemRes, {
+                id   = item.iconId,
+                name = name,
+                qty  = tonumber(item.tier) or 1,
+            }, idx);
         end
     end
+    imgui.EndChild();
 end
 
 ------------------------------------------------------------
@@ -188,8 +176,18 @@ end
 local function renderWindow()
     if not isOpen[1] then return; end
 
+    -- Auto-request summary on first open
+    if not summaryLoaded then
+        sendVaultSummary();
+        summaryLoaded = 'pending';
+    end
+
     imgui.SetNextWindowSize({ 280, 400 }, ImGuiCond_FirstUseEver);
-    if imgui.Begin('Vault', isOpen, ImGuiWindowFlags_NoCollapse) then
+    imgui.SetNextWindowSizeConstraints({ 250, 300 }, { 400, 700 });
+
+    local winColors = ui.pushWindowStyle();
+
+    if imgui.Begin('Vault###trove_vault', isOpen, ImGuiWindowFlags_None) then
         if selectedCat then
             renderItems();
         else
@@ -197,6 +195,7 @@ local function renderWindow()
         end
     end
     imgui.End();
+    ui.popWindowStyle(winColors);
 end
 
 ------------------------------------------------------------
@@ -215,6 +214,9 @@ return {
     commands = {
         vault = function(state, args)
             isOpen[1] = not isOpen[1];
+            if isOpen[1] and not summaryLoaded then
+                sendVaultSummary();
+            end
         end,
     },
 
@@ -224,4 +226,52 @@ return {
         label   = 'Vault',
         icon    = 26352, -- Moogle Sacoche
     },
+
+    onPacketIn = function(e, state)
+        if e.id ~= 0x1A4 then return; end
+
+        local action = struct.unpack('B', e.data_modified, 0x04 + 1);
+
+        -- Tab summary response
+        if action == S2C_TAB_SUMMARY then
+            local source = struct.unpack('B', e.data_modified, 0x06 + 1);
+            if source ~= TAB_SOURCE_VAULT then return; end
+
+            local entryCount = struct.unpack('B', e.data_modified, 0x05 + 1);
+            summary = {};
+            local offset = 0x08;
+            for i = 1, entryCount do
+                local category = readString(e.data_modified, offset, 20);
+                local count    = readU16(e.data_modified, offset + 20);
+                table.insert(summary, { category = category, count = count });
+                offset = offset + 22;
+            end
+            summaryLoaded = true;
+            return;
+        end
+
+        -- Item entries (shared with squire format)
+        if action == S2C_SQUIRE_ENTRY and selectedCat then
+            local iconId   = readU16(e.data_modified, 0x06);
+            local category = readString(e.data_modified, 0x08, 19);
+            local name     = readString(e.data_modified, 0x34, 23);
+            local tier     = readString(e.data_modified, 0x4C, 7);
+
+            -- Only capture if it's for our current category
+            if category == selectedCat then
+                table.insert(items, {
+                    iconId = iconId,
+                    name   = name,
+                    tier   = tier,
+                });
+            end
+            return;
+        end
+
+        -- End list
+        if action == S2C_END_LIST and selectedCat and not itemsLoaded then
+            itemsLoaded = true;
+            return;
+        end
+    end,
 };

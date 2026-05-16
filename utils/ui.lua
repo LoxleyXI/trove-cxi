@@ -267,4 +267,163 @@ ui.popColor = function(count)
     imgui.PopStyleColor(count or 1);
 end
 
+------------------------------------------------------------
+-- Category button (reusable for any plugin showing category lists)
+--
+-- Usage:
+--     if ui.categoryButton('Category Name', '12 items', index) then
+--         -- selected
+--     end
+------------------------------------------------------------
+ui.categoryButton = function(name, subtitle, index)
+    index = index or 0;
+    local btnId = string.format('##catbtn_p_%s_%d', name, index);
+    local rowWidth = imgui.GetContentRegionAvail();
+
+    local bg = ui.color('childBg');
+    local bgColor = { bg[1] + 0.03, bg[2] + 0.03, bg[3] + 0.05, 0.90 };
+
+    imgui.PushStyleColor(ImGuiCol_ChildBg, bgColor);
+    imgui.BeginChild(btnId, { rowWidth, 34 }, false);
+
+    local dl = imgui.GetWindowDrawList();
+    local wx, wy = imgui.GetWindowPos();
+    dl:AddRectFilled({ wx, wy }, { wx + 3, wy + 34 }, imgui.GetColorU32(ui.color('accent')));
+
+    imgui.SetCursorPosY(0);
+    local clicked = imgui.Selectable(string.format('##catsel_p_%s_%d', name, index), false,
+        ImGuiSelectableFlags_SpanAllColumns, { 0, 34 });
+
+    dl:AddText({ wx + 10, wy + 5 }, imgui.GetColorU32(ui.color('white')), name);
+    dl:AddText({ wx + 10, wy + 19 }, imgui.GetColorU32(ui.color('dimmed')), subtitle);
+
+    imgui.EndChild();
+    imgui.PopStyleColor(1);
+
+    return clicked;
+end
+
+------------------------------------------------------------
+-- Section header (accent bar + label, like squire/ebox category headers)
+--
+-- Usage:
+--     ui.sectionHeader('Category Name', 12)
+------------------------------------------------------------
+ui.sectionHeader = function(label, count)
+    local hdrId = string.format('##shdr_%s', label);
+    local bg = ui.color('childBg');
+    local headerBg = { bg[1] + 0.05, bg[2] + 0.05, bg[3] + 0.08, 1.0 };
+
+    imgui.PushStyleColor(ImGuiCol_ChildBg, headerBg);
+    imgui.BeginChild(hdrId, { -1, 22 }, false);
+
+    local dl = imgui.GetWindowDrawList();
+    local wx, wy = imgui.GetWindowPos();
+    dl:AddRectFilled({ wx, wy }, { wx + 3, wy + 22 }, imgui.GetColorU32(ui.color('accent')));
+
+    imgui.SetCursorPosX(10);
+    imgui.SetCursorPosY(3);
+    imgui.TextColored(ui.color('accent'), label);
+
+    if count then
+        local countStr = string.format('(%d)', count);
+        local ww = imgui.GetWindowWidth();
+        imgui.SameLine(ww - imgui.CalcTextSize(countStr) - 12);
+        imgui.SetCursorPosY(3);
+        imgui.TextColored(ui.color('dimmed'), countStr);
+    end
+
+    imgui.EndChild();
+    imgui.PopStyleColor(1);
+end
+
+------------------------------------------------------------
+-- Item row rendering (reusable for any plugin showing item lists)
+--
+-- Usage:
+--     ui.itemRow(renderIcon, getItemRes, {
+--         id    = 12345,   -- item ID (for icon + resource lookup)
+--         name  = 'Item',  -- display name (fallback if no resource)
+--         qty   = 3,       -- quantity (omit or 0/1 to hide)
+--     }, index)
+------------------------------------------------------------
+local FLAG_RARE = 0x8000;
+local FLAG_EX   = 0x4000;
+
+ui.itemRow = function(renderIconFn, getItemResFn, item, index)
+    index = index or 0;
+    local itemId = item.id or item.iconId or 0;
+    local res = getItemResFn(itemId);
+    local name = (res and res.Name and res.Name[1]) or item.name or '???';
+    local qty  = item.qty or (item.tier and tonumber(item.tier)) or item.count or 1;
+
+    local flags  = (res and res.Flags) or 0;
+    local isRare = bit.band(flags, FLAG_RARE) ~= 0;
+    local isEx   = bit.band(flags, FLAG_EX)   ~= 0;
+
+    local isAlt = (index % 2 == 0);
+    local rowId = string.format('##irow_%d_%d', item.id or item.iconId or 0, index);
+
+    local base = ui.color('childBg');
+    local bgColor = isAlt
+        and { base[1], base[2], base[3], 0.35 }
+        or  { base[1], base[2], base[3], 0.20 };
+    imgui.PushStyleColor(ImGuiCol_ChildBg, bgColor);
+    imgui.BeginChild(rowId, { -1, 28 }, false);
+
+    imgui.SetCursorPos({ 6, 2 });
+    if not renderIconFn(itemId, 24) then
+        imgui.Dummy({ 24, 24 });
+    end
+    imgui.SameLine(34);
+    imgui.SetCursorPosY(7);
+
+    -- Name
+    local dl  = imgui.GetWindowDrawList();
+    local wx, wy = imgui.GetWindowPos();
+    local ww = imgui.GetWindowWidth();
+
+    -- Right side: qty + badges
+    local rightX = wx + ww - 8;
+    local qtyStr = '';
+    if qty > 1 then
+        qtyStr = string.format('x%d', qty);
+        local qtyW = imgui.CalcTextSize(qtyStr);
+        rightX = rightX - qtyW;
+        dl:AddText({ rightX, wy + 7 }, imgui.GetColorU32(ui.color('dimmed')), qtyStr);
+        rightX = rightX - 6;
+    end
+
+    if isEx then
+        local tw = imgui.CalcTextSize('Ex') + 8;
+        rightX = rightX - tw;
+        dl:AddRectFilled({ rightX, wy + 6 }, { rightX + tw, wy + 22 }, imgui.GetColorU32({ 0.15, 0.30, 0.50, 1.0 }));
+        dl:AddText({ rightX + 4, wy + 7 }, imgui.GetColorU32({ 0.5, 0.7, 1.0, 1.0 }), 'Ex');
+        rightX = rightX - 4;
+    end
+
+    if isRare then
+        local tw = imgui.CalcTextSize('R') + 8;
+        rightX = rightX - tw;
+        dl:AddRectFilled({ rightX, wy + 6 }, { rightX + tw, wy + 22 }, imgui.GetColorU32({ 0.45, 0.35, 0.15, 1.0 }));
+        dl:AddText({ rightX + 4, wy + 7 }, imgui.GetColorU32({ 1.0, 0.85, 0.4, 1.0 }), 'R');
+        rightX = rightX - 4;
+    end
+
+    -- Truncate name to fit
+    local nameX = wx + 34;
+    local nameMaxW = rightX - nameX - 4;
+    local displayName = name;
+    if imgui.CalcTextSize(displayName) > nameMaxW and nameMaxW > 20 then
+        while #displayName > 1 and imgui.CalcTextSize(displayName .. '..') > nameMaxW do
+            displayName = displayName:sub(1, -2);
+        end
+        displayName = displayName .. '..';
+    end
+    dl:AddText({ nameX, wy + 7 }, imgui.GetColorU32(ui.color('white')), displayName);
+
+    imgui.EndChild();
+    imgui.PopStyleColor(1);
+end
+
 return ui;
