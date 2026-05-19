@@ -2941,7 +2941,7 @@ local function renderWindow()
         end
 
         -- Burger menu button (absolute positioned top-right, above tab content)
-        local btnLabel = trove_plugins.hasAlert() and '(!)'or '=';
+        local btnLabel = trove_plugins.hasAlert() and '!' or '=';
         imgui.SetCursorPos({ imgui.GetWindowWidth() - 28, 34 });
         if imgui.SmallButton(btnLabel) then
             imgui.OpenPopup('##trove_panels');
