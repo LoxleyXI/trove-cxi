@@ -22,6 +22,7 @@ local ui = nil;
 local ZONES = {
     {
         name = "Dynamis-San d'Oria",
+        tint = { 0.20, 0.12, 0.12 }, -- red
         pops = {
             { name = "Barbaric Bijou",  id = 3353, mask = 'A', bit = 1,  spawns = "Overlord's Tombstone" },
             { name = "Chapter 1",       id = 3404, mask = 'A', bit = 11, spawns = "Arch Overlord (1/5)" },
@@ -39,6 +40,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Bastok",
+        tint = { 0.12, 0.14, 0.22 }, -- blue
         pops = {
             { name = "Steelwall Bijou", id = 3354, mask = 'A', bit = 2,  spawns = "Gu'Dha Effigy" },
             { name = "Chapter 6",       id = 3409, mask = 'A', bit = 16, spawns = "Arch Gu'Dha (1/5)" },
@@ -56,6 +58,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Windurst",
+        tint = { 0.12, 0.18, 0.12 }, -- green
         pops = {
             { name = "Divine Bijou",    id = 3355, mask = 'A', bit = 3,  spawns = "Tzee Xicu Idol" },
             { name = "Chapter 11",      id = 3414, mask = 'A', bit = 21, spawns = "Arch Tzee Xicu (1/5)" },
@@ -73,6 +76,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Jeuno",
+        tint = { 0.20, 0.18, 0.10 }, -- yellow
         pops = {
             { name = "Roving Bijou",    id = 3356, mask = 'A', bit = 4,  spawns = "Goblin Golem" },
             { name = "Chapter 16",      id = 3419, mask = 'A', bit = 26, spawns = "Arch Goblin Golem (1/5)" },
@@ -90,6 +94,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Beaucedine",
+        tint = { 0.12, 0.16, 0.22 }, -- light blue
         pops = {
             { name = "Leering Bijou",   id = 3357, mask = 'A', bit = 5,  spawns = "Angra Mainyu" },
             { name = "Chapter 21",      id = 3424, mask = 'A', bit = 31, spawns = "Arch Angra Mainyu (1/5)" },
@@ -112,6 +117,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Xarcabard",
+        tint = { 0.09, 0.10, 0.18 }, -- dark blue
         pops = {
             { name = "Shrouded Bijou",  id = 3358, mask = 'A', bit = 6,  spawns = "Dynamis Lord" },
             { name = "Chapter 26",      id = 3429, mask = 'B', bit = 4,  spawns = "Arch Dynamis Lord (1/5)" },
@@ -145,6 +151,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Valkurm",
+        tint = { 0.16, 0.12, 0.20 }, -- purple
         pops = {
             { name = "Creepers Juju",   id = 3456, mask = 'A', bit = 7,  spawns = "Cirrate Christelle" },
             { name = "Tome II Ch.1",    id = 3470, mask = 'B', bit = 9,  spawns = "Arch Christelle (1/4)" },
@@ -160,6 +167,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Buburimu",
+        tint = { 0.16, 0.12, 0.20 }, -- purple
         pops = {
             { name = "Revelatory Juju", id = 3457, mask = 'A', bit = 8,  spawns = "Apocalyptic Beast" },
             { name = "Tome II Ch.5",    id = 3474, mask = 'B', bit = 13, spawns = "Arch Apoc. Beast (1/5)" },
@@ -177,6 +185,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Qufim",
+        tint = { 0.16, 0.12, 0.20 }, -- purple
         pops = {
             { name = "Undying Juju",    id = 3458, mask = 'A', bit = 9,  spawns = "Antaeus" },
             { name = "Tome II Ch.10",   id = 3479, mask = 'B', bit = 18, spawns = "Arch Antaeus (1/4)" },
@@ -192,6 +201,7 @@ local ZONES = {
     },
     {
         name = "Dynamis-Tavnazia",
+        tint = { 0.20, 0.15, 0.10 }, -- orange
         pops = {
             { name = "Heralds Juju",    id = 3459, mask = 'A', bit = 10, spawns = "Diabolos" },
             { name = "Tome II Ch.14",   id = 3483, mask = 'B', bit = 22, spawns = "Arch Diabolos (1/4)" },
@@ -393,10 +403,35 @@ local function renderZoneList()
     for i, zone in ipairs(ZONES) do
         local zoneOwned = countZoneOwned(zone);
         local zoneTotal = countZoneTotal(zone);
-        local subtitle = string.format('%d/%d collected', zoneOwned, zoneTotal);
-        if ui.categoryButton(zone.name, subtitle, i) then
+        local subtitle  = string.format('%d/%d collected', zoneOwned, zoneTotal);
+        local tint      = zone.tint or { 0.14, 0.12, 0.20 };
+
+        local btnId    = string.format('##cdzone_%d', i);
+        local rowWidth = imgui.GetContentRegionAvail();
+        local bgColor  = { tint[1], tint[2], tint[3], 0.85 };
+        local barColor = { tint[1] * 2.0, tint[2] * 2.0, tint[3] * 2.0, 1.0 };
+
+        imgui.PushStyleColor(ImGuiCol_ChildBg, bgColor);
+        imgui.BeginChild(btnId, { rowWidth, 34 }, false);
+
+        local dl = imgui.GetWindowDrawList();
+        local wx, wy = imgui.GetWindowPos();
+        dl:AddRectFilled({ wx, wy }, { wx + 3, wy + 34 }, imgui.GetColorU32(barColor));
+
+        imgui.SetCursorPosY(0);
+        local clicked = imgui.Selectable(string.format('##cdsel_%d', i), false,
+            ImGuiSelectableFlags_SpanAllColumns, { 0, 34 });
+
+        dl:AddText({ wx + 10, wy + 5 }, imgui.GetColorU32(ui.color('white')), zone.name);
+        dl:AddText({ wx + 10, wy + 19 }, imgui.GetColorU32(ui.color('dimmed')), subtitle);
+
+        imgui.EndChild();
+        imgui.PopStyleColor(1);
+
+        if clicked then
             selectedZone = i;
         end
+
         imgui.Spacing();
     end
     imgui.EndChild();
