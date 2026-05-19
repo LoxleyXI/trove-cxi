@@ -82,10 +82,10 @@ local ZONES = {
             { name = "Chapter 20",      id = 3423, mask = 'A', bit = 30, spawns = "Arch Goblin Golem (5/5)" },
         },
         drops = {
-            { name = "Odious Charm",       id = 3384, mask = 'C', bit = 5 },
-            { name = "Odious Backscale",   id = 3385, mask = 'C', bit = 6 },
-            { name = "Odious Engraving",   id = 3386, mask = 'C', bit = 7 },
-            { name = "Odious Letterbox",   id = 3387, mask = 'C', bit = 8 },
+            { name = "Odious Cup",         id = 3392, mask = 'C', bit = 23, spawns = "Quicktrix Hexhands" },
+            { name = "Odious Die",         id = 3393, mask = 'C', bit = 24, spawns = "Feralox Honeylips" },
+            { name = "Odious Mask",        id = 3394, mask = 'C', bit = 25, spawns = "Scourquix Scaleskin" },
+            { name = "Odious Grenade",     id = 3395, mask = 'C', bit = 26, spawns = "Wilywox Tenderpalm" },
         },
     },
     {
@@ -98,7 +98,17 @@ local ZONES = {
             { name = "Chapter 24",      id = 3427, mask = 'B', bit = 2,  spawns = "Arch Angra Mainyu (4/5)" },
             { name = "Chapter 25",      id = 3428, mask = 'B', bit = 3,  spawns = "Arch Angra Mainyu (5/5)" },
         },
-        drops = {},
+        drops = {
+            { name = "Odious Talisman",        id = 3396, mask = 'C', bit = 27, spawns = "Taquede" },
+            { name = "Odious Bell",            id = 3397, mask = 'C', bit = 28, spawns = "Pignonpausard" },
+            { name = "Odious Tree Root",       id = 3398, mask = 'C', bit = 29, spawns = "Hitaume" },
+            { name = "Odious Mirror",          id = 3399, mask = 'C', bit = 30, spawns = "Cavanneche" },
+            { name = "Despot's Parchment",     id = 3359, mask = 'C', bit = 31, spawns = "Goublefaupe" },
+            { name = "Sadist's Parchment",     id = 3360, mask = 'C', bit = 32, spawns = "Quiebitiel" },
+            { name = "Villain's Parchment",    id = 3361, mask = 'D', bit = 1,  spawns = "Mildaunegeux" },
+            { name = "Deluder's Parchment",    id = 3362, mask = 'D', bit = 2,  spawns = "Velosareon" },
+            { name = "Traitor's Parchment",    id = 3363, mask = 'D', bit = 3,  spawns = "Dagourmarche" },
+        },
     },
     {
         name = "Dynamis-Xarcabard",
@@ -110,7 +120,28 @@ local ZONES = {
             { name = "Chapter 29",      id = 3432, mask = 'B', bit = 7,  spawns = "Arch Dynamis Lord (4/5)" },
             { name = "Chapter 30",      id = 3433, mask = 'B', bit = 8,  spawns = "Arch Dynamis Lord (5/5)" },
         },
-        drops = {},
+        drops = {
+            { name = "Odious Skull",       id = 3400, mask = 'D', bit = 4,  spawns = "Duke Haures" },
+            { name = "Odious Horn",        id = 3401, mask = 'D', bit = 5,  spawns = "Marquis Caim" },
+            { name = "Odious Blood",       id = 3402, mask = 'D', bit = 6,  spawns = "Baron Avnas" },
+            { name = "Odious Pen",         id = 3403, mask = 'D', bit = 7,  spawns = "Count Haagenti" },
+            { name = "Mystic Goad",        id = 3364, mask = 'D', bit = 8,  spawns = "Animated Knuckles" },
+            { name = "Ornate Goad",        id = 3365, mask = 'D', bit = 9,  spawns = "Animated Dagger" },
+            { name = "Holy Goad",          id = 3366, mask = 'D', bit = 10, spawns = "Animated Longsword" },
+            { name = "Intricate Goad",     id = 3367, mask = 'D', bit = 11, spawns = "Animated Claymore" },
+            { name = "Runaeic Goad",       id = 3368, mask = 'D', bit = 12, spawns = "Animated Tabar" },
+            { name = "Seraphic Goad",      id = 3369, mask = 'D', bit = 13, spawns = "Animated Great Axe" },
+            { name = "Tenebrous Goad",     id = 3370, mask = 'D', bit = 14, spawns = "Animated Scythe" },
+            { name = "Stellar Goad",       id = 3371, mask = 'D', bit = 15, spawns = "Animated Spear" },
+            { name = "Demoniac Goad",      id = 3372, mask = 'D', bit = 16, spawns = "Animated Kunai" },
+            { name = "Divine Goad",        id = 3373, mask = 'D', bit = 17, spawns = "Animated Tachi" },
+            { name = "Heavenly Goad",      id = 3374, mask = 'D', bit = 18, spawns = "Animated Hammer" },
+            { name = "Celestial Goad",     id = 3375, mask = 'D', bit = 19, spawns = "Animated Staff" },
+            { name = "Snarled Goad",       id = 3376, mask = 'D', bit = 20, spawns = "Animated Longbow" },
+            { name = "Ethereal Goad",      id = 3377, mask = 'D', bit = 21, spawns = "Animated Gun" },
+            { name = "Mysterial Goad",     id = 3378, mask = 'D', bit = 22, spawns = "Animated Horn" },
+            { name = "Supernal Goad",      id = 3379, mask = 'D', bit = 23, spawns = "Animated Shield" },
+        },
     },
     {
         name = "Dynamis-Valkurm",
@@ -186,6 +217,7 @@ local CONTAINERS = {
 local maskA    = 0;
 local maskB    = 0;
 local maskC    = 0;
+local maskD    = 0;
 local hasCodex = false;
 local lastScan = 0;
 
@@ -196,6 +228,7 @@ end
 local function getMask(key)
     if key == 'B' then return maskB; end
     if key == 'C' then return maskC; end
+    if key == 'D' then return maskD; end
     return maskA;
 end
 
@@ -215,6 +248,7 @@ local function scanCodex()
     maskA    = 0;
     maskB    = 0;
     maskC    = 0;
+    maskD    = 0;
     hasCodex = false;
 
     local inventory = AshitaCore:GetMemoryManager():GetInventory();
@@ -231,6 +265,7 @@ local function scanCodex()
                 maskA = readUint32(extra, 0);
                 maskB = readUint32(extra, 4);
                 maskC = readUint32(extra, 8);
+                maskD = readUint32(extra, 12);
                 return;
             end
         end
