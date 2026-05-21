@@ -999,7 +999,6 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
     if action == S2C.END_LIST then
         local now = os.clock();
         local source = struct.unpack('B', e.data_modified, 0x05 + 1);
-
         -- Tab protocol responses (source > 0 handled by plugins)
         if source == TAB_SOURCE.SQUIRE then
             state.squireLoaded        = true;
@@ -1203,6 +1202,8 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
             skills      = skills,
             ingredients = ingredients,
         });
+        state.craftLoaded    = true;
+        state.pendingRequest = nil;
         return;
     end
 
@@ -1265,11 +1266,14 @@ ashita.events.register('packet_in', 'trove_packet_in', function(e)
             state.lockMsg  = msg;
             state.cwChecked = true;
         end
-        state.pendingRequest = nil;
+        if state.pendingRequest ~= 'crafting' then
+            state.pendingRequest = nil;
+        end
         return;
     end
 
     end); -- pcall
+    if not ok then print('[trove] Packet error: ' .. tostring(err)); end
 end);
 
 ------------------------------------------------------------
@@ -2769,8 +2773,8 @@ local function renderCraftingTab()
             imgui.TextColored(COLORS.header, state.craftItemName);
         end
 
-        imgui.SameLine(0, 12);
-        imgui.Checkbox('Have Mats', ui.craftHaveMats);
+        -- imgui.SameLine(0, 12);
+        -- imgui.Checkbox('Have Mats', ui.craftHaveMats);
 
         imgui.Spacing();
         imgui.Separator();
@@ -2779,7 +2783,7 @@ local function renderCraftingTab()
         imgui.PushStyleColor(ImGuiCol_ChildBg, COLORS.windowBg);
         imgui.BeginChild('##craft_scroll', { -1, -1 }, false);
 
-        local filterMats = ui.craftHaveMats[1];
+        local filterMats = false;
         local shown = 0;
         if #state.craftRecipes == 0 then
             imgui.Spacing(); imgui.Spacing();
