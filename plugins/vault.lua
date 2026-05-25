@@ -472,7 +472,7 @@ return {
             return;
         end
 
-        if action == S2C_ACK then
+        if action == S2C_ACK and isOnCooldown() then
             local resultCode = struct.unpack('B', e.data_modified, 0x05 + 1);
             local msg = readString(e.data_modified, 0x10, 31);
 

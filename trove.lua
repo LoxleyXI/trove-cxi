@@ -20,7 +20,7 @@
 
 addon.name      = 'trove';
 addon.author    = 'Loxley';
-addon.version   = '2.1.0';
+addon.version   = '2.2.0';
 addon.desc      = 'Browse Ephemeral Box, Currency, Points, and Squire in-game';
 
 require('common');
