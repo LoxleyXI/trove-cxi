@@ -3165,6 +3165,16 @@ ashita.events.register('unload', 'trove_unload', function()
     textureCache   = {};
     fileTextures   = {};
     textureHandles = {};
+    craftIndex     = nil;
+    craftIndexSize = 0;
+
+    -- Unregister all event callbacks to prevent closure leaks on reload
+    ashita.events.unregister('d3d_present', 'trove_render');
+    ashita.events.unregister('command', 'trove_command');
+    ashita.events.unregister('packet_in', 'trove_packet_in');
+    ashita.events.unregister('packet_in', 'trove_synth_result');
+    ashita.events.unregister('packet_in', 'trove_inv_watch');
+    ashita.events.unregister('packet_in', 'trove_plugin_packets');
     print('[trove] Unloaded.');
 end);
 
