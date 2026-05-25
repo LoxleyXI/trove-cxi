@@ -2354,6 +2354,9 @@ end
 
 local function requestRecipe(itemId, pushHistory)
     if pushHistory ~= false and state.craftItemId > 0 then
+        if #state.craftHistory >= 20 then
+            table.remove(state.craftHistory, 1);
+        end
         table.insert(state.craftHistory, { id = state.craftItemId, name = state.craftItemName });
     end
     local res = getItemRes(itemId);
