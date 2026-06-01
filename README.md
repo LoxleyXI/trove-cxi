@@ -43,6 +43,7 @@ Plugins add floating windows accessible from the menu (`=` button).
 | Stronghold | SCNM artifact collection tracker | All |
 | Scrolls | Scroll collection tracker | CW |
 | Lumoria | Sea collection tracker (armor, torques, weapons, organs, buffs) | All |
+| Storage Slips | Browse Mog Storage Slip contents | All |
 | Export | Export inventory, jobs, and merits to Lua file | All |
 | Settings | Theme and display settings | All |
 
@@ -56,6 +57,7 @@ Plugins add floating windows accessible from the menu (`=` button).
 | `/trove scrolls` | Toggle Scrolls plugin |
 | `/trove lumoria` | Toggle Lumoria plugin |
 | `/trove sea` | Alias for lumoria |
+| `/trove slips` | Toggle Storage Slips plugin |
 | `/trove export` | Run inventory export |
 
 ## Requirements
