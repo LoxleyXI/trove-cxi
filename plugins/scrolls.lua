@@ -69,6 +69,10 @@ local CAT_ICONS = {
 local spellNameToId = {};
 local spellMapBuilt = false;
 
+local function normalize(name)
+    return name:gsub("'", ''):lower();
+end
+
 local function buildSpellMap()
     if spellMapBuilt then return; end
     spellMapBuilt = true;
@@ -76,13 +80,13 @@ local function buildSpellMap()
     for i = 0, 1024 do
         local spell = resMgr:GetSpellById(i);
         if spell and spell.Name and spell.Name[1] and spell.Name[1] ~= '' then
-            spellNameToId[spell.Name[1]] = i;
+            spellNameToId[normalize(spell.Name[1])] = i;
         end
     end
 end
 
 local function isSpellLearned(spellName)
-    local spellId = spellNameToId[spellName];
+    local spellId = spellNameToId[normalize(spellName)];
     if spellId == nil then return false; end
     return AshitaCore:GetMemoryManager():GetPlayer():HasSpell(spellId);
 end
