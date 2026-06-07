@@ -903,21 +903,25 @@ local function renderIncursionWeapon(wpn, zoneColor, index)
     local base = ui.color('childBg');
 
     -- Weapon name header with zone-colored background
+    -- Weapon name header with zone-colored background
+    imgui.Dummy({ 0, 3 }); -- top margin
     local dl = imgui.GetWindowDrawList();
     local hx, hy = imgui.GetCursorScreenPos();
     local hw = imgui.GetContentRegionAvail();
+    local hdrH = 30;
     local headerBg = { zoneColor[1] * 0.20, zoneColor[2] * 0.20, zoneColor[3] * 0.20, 0.70 };
-    dl:AddRectFilled({ hx, hy }, { hx + hw, hy + 24 }, imgui.GetColorU32(headerBg), 3);
-    dl:AddRectFilled({ hx, hy }, { hx + 3, hy + 24 }, imgui.GetColorU32(zoneColor));
+    dl:AddRectFilled({ hx, hy }, { hx + hw, hy + hdrH }, imgui.GetColorU32(headerBg), 3);
+    dl:AddRectFilled({ hx, hy }, { hx + 3, hy + hdrH }, imgui.GetColorU32(zoneColor));
 
     imgui.SetCursorPosX(10);
+    imgui.SetCursorPosY(imgui.GetCursorPosY() + 5);
     renderIcon(wpn.id, 20);
     imgui.SameLine(0, 4);
     local nameCol = hasFinal and { 1.00, 0.85, 0.30, 1.00 } or ui.color('white');
     imgui.TextColored(nameCol, wpn.name);
     imgui.SameLine(0, 6);
     imgui.TextColored(ui.color('dimmed'), wpn.job);
-    imgui.Dummy({ 0, 2 });
+    imgui.Dummy({ 0, 8 });
 
     -- 3 phase boxes side by side
     local gap = 4;
