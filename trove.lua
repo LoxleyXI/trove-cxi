@@ -20,7 +20,7 @@
 
 addon.name      = 'trove';
 addon.author    = 'Loxley';
-addon.version   = '3.0.0';
+addon.version   = '3.1.0';
 addon.desc      = 'Browse Ephemeral Box, Currency, Points, and Squire in-game';
 
 require('common');
@@ -1481,9 +1481,6 @@ local function renderItemDetail(res, storedQty)
         local lvlStr = '';
         if res.Level > 0 then
             lvlStr = string.format('Lv%d ', res.Level);
-            if res.ItemLevel > 0 and res.ItemLevel ~= res.Level then
-                lvlStr = string.format('Lv%d (iLv%d) ', res.Level, res.ItemLevel);
-            end
         end
         imgui.Spacing();
         imgui.TextColored(COLORS.jobText, lvlStr .. jobStr);

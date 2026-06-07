@@ -257,6 +257,9 @@ local EXTRA_CARDS = {
 
 ------------------------------------------------------------
 -- Inventory containers to scan
+-- Forward declaration (populated later, after CONTAINERS)
+local INCURSION_ZONES;
+
 ------------------------------------------------------------
 local CONTAINERS = {
     0,  -- Inventory
@@ -287,6 +290,7 @@ local isOpen       = { false };
 local scanned      = false;
 local currencyHave = { BYNE = 0, SHELL = 0, BRONZE = 0 };
 local ownedItems   = {}; -- [itemId] = true
+local itemCounts   = {}; -- [itemId] = count (for materials that need quantities)
 local troveState   = nil; -- reference to main trove state (for currency data)
 
 ------------------------------------------------------------
@@ -310,6 +314,7 @@ end
 ------------------------------------------------------------
 local function scanWeapons()
     ownedItems = {};
+    itemCounts = {};
 
     local inventory = AshitaCore:GetMemoryManager():GetInventory();
     if not inventory then
@@ -317,8 +322,24 @@ local function scanWeapons()
         return;
     end
 
-    -- Build lookup of all relic weapon IDs + extra material IDs
+    -- Build lookup of all relic weapon IDs + extra material IDs + incursion IDs
     local weaponLookup = {};
+
+    -- Incursion weapons (INCURSION_ZONES defined later, checked lazily)
+    if INCURSION_ZONES then
+        for _, zone in ipairs(INCURSION_ZONES) do
+            for _, wpn in ipairs(zone.weapons) do
+                weaponLookup[wpn.id] = true;
+                weaponLookup[wpn.mat] = true; -- material item for quantity counting
+                for _, phase in ipairs(wpn.phases) do
+                    weaponLookup[phase.result] = true;
+                    for _, reqId in ipairs(phase.reqs) do
+                        weaponLookup[reqId] = true;
+                    end
+                end
+            end
+        end
+    end
     for _, relic in ipairs(RELICS) do
         for _, stage in ipairs(relic.stages) do
             weaponLookup[stage.weaponId] = true;
@@ -353,6 +374,7 @@ local function scanWeapons()
                 if ok and item and item.Id ~= 0 and item.Id ~= 65535 then
                     if weaponLookup[item.Id] then
                         ownedItems[item.Id] = true;
+                        itemCounts[item.Id] = (itemCounts[item.Id] or 0) + (item.Count or 1);
                     end
                 end
             end
@@ -693,6 +715,363 @@ local function renderExtraCard(card, index, cardW)
 end
 
 ------------------------------------------------------------
+-- CW Incursion Weapons (Mythrix ultimates)
+-- 18 weapons across 3 zones, each requires 2 sub-weapons
+------------------------------------------------------------
+-- Each weapon has 3 phases:
+--   Phase 1 (Smithnix): base weapon, needs materials + beastman currency
+--   Phase 2 (Mythrix Trade): P1 weapon, needs base +1 weapon + 2 endgame weapons + hoards + gems
+-- All IDs verified from cw_smithnix.lua, npc_mythrix.lua, enum/xi/item.lua
+-- Phase 1 (Forge): 4 mats + 300 beastman currency
+-- Phase 2 (Upgrade): 3 weapons + base weapon + 500 beastman currency + 10 chains
+-- Phase 3 (Trade): +1 weapon + 2 endgame weapons + 99 hoards + 250 gems + 12 materials
+-- W = { name, id(final), job, coin(beastman), chain, hoard, gem, material, phases }
+-- phases[n] = { result, reqs = {itemId,...}, bars = { {name, icon, have_key, target}, ... } }
+-- have_key = name to match in state.currency
+INCURSION_ZONES = {
+    {
+        name  = 'Mamook',
+        color = { 0.90, 0.45, 0.40, 1.00 },  -- red (Orcish)
+        weapons = {
+            { name = 'Ohrmazd', id = 20530, job = 'MNK/PUP', coin = 3951, chain = 3012, hoard = 3063, gem = 8964, mat = 1458, phases = {
+                { result = 21510, reqs = { 16437, 16446, 17519, 2984 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20531, reqs = { 17472, 17503, 18350, 21510 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20530, reqs = { 20531, 18351, 16426 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8964, 'Imperial Citrine', 250 }, { 'Mats', 1458, nil, 12 } } },
+            }},
+            { name = 'Claidheamh', id = 20718, job = 'PLD/BLU', coin = 3951, chain = 3012, hoard = 3063, gem = 8961, mat = 1409, phases = {
+                { result = 22219, reqs = { 16628, 16634, 17692, 2985 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20719, reqs = { 16580, 16533, 17693, 22219 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20718, reqs = { 20719, 17695, 17649 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8961, 'Imperial Opal', 250 }, { 'Mats', 1409, nil, 12 } } },
+            }},
+            { name = 'Kumbhakarna', id = 20809, job = 'WAR/BST', coin = 3951, chain = 3012, hoard = 3063, gem = 8962, mat = 1459, phases = {
+                { result = 21712, reqs = { 16663, 16664, 16687, 2986 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20810, reqs = { 17969, 16676, 17936, 21712 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20809, reqs = { 20810, 17937, 17960 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8962, 'Imperial Amethyst', 250 }, { 'Mats', 1459, nil, 12 } } },
+            }},
+            { name = 'Svarga', id = 20857, job = 'WAR', coin = 3951, chain = 3012, hoard = 3063, gem = 8964, mat = 1467, phases = {
+                { result = 21769, reqs = { 16717, 18215, 18209, 2987 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20859, reqs = { 18507, 16727, 18210, 21769 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20857, reqs = { 20859, 18211, 18497 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8964, 'Imperial Citrine', 250 }, { 'Mats', 1467, nil, 12 } } },
+            }},
+            { name = 'Olyndicus', id = 20946, job = 'DRG', coin = 3951, chain = 3012, hoard = 3063, gem = 8962, mat = 1462, phases = {
+                { result = 21864, reqs = { 16864, 16876, 18085, 2988 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20947, reqs = { 16885, 16882, 18086, 21864 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20946, reqs = { 20947, 18088, 18125 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8962, 'Imperial Amethyst', 250 }, { 'Mats', 1462, nil, 12 } } },
+            }},
+            { name = 'Svalinn', id = 27627, job = 'WAR', coin = 3951, chain = 3012, hoard = 3063, gem = 8960, mat = 1468, phases = {
+                { result = 26413, reqs = { 12334, 12326, 18171, 2989 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 27624, reqs = { 12348, 16187, 12405, 26413 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 27627, reqs = { 27624, 12361, 12360 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8960, 'Imperial Garnet', 250 }, { 'Mats', 1468, nil, 12 } } },
+            }},
+        },
+    },
+    {
+        name  = 'Halvung',
+        color = { 0.45, 0.65, 1.00, 1.00 },  -- blue (Quadav)
+        weapons = {
+            { name = 'Claritas', id = 18909, job = 'RDM', coin = 3952, chain = 3013, hoard = 3064, gem = 8965, mat = 1468, phases = {
+                { result = 21622, reqs = { 16633, 16803, 17692, 2978 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 18905, reqs = { 16822, 16821, 17696, 21622 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 18909, reqs = { 18905, 17694, 17658 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8965, 'Imperial Sapphire', 250 }, { 'Mats', 1468, nil, 12 } } },
+            }},
+            { name = 'Macbain', id = 20759, job = 'DRK/RUN', coin = 3952, chain = 3013, hoard = 3064, gem = 8960, mat = 1459, phases = {
+                { result = 21665, reqs = { 16931, 16932, 16959, 2979 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 20760, reqs = { 16942, 16945, 16937, 21665 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 20759, reqs = { 20760, 18385, 19153 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8960, 'Imperial Garnet', 250 }, { 'Mats', 1459, nil, 12 } } },
+            }},
+            { name = 'Inanna', id = 20901, job = 'BLM/DRK', coin = 3952, chain = 3013, hoard = 3064, gem = 8961, mat = 1458, phases = {
+                { result = 21822, reqs = { 16779, 16782, 18045, 2980 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 20903, reqs = { 16787, 18041, 18046, 21822 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 20901, reqs = { 20903, 18047, 18948 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8961, 'Imperial Opal', 250 }, { 'Mats', 1458, nil, 12 } } },
+            }},
+            { name = 'Nehushtan', id = 21105, job = 'WHM/GEO', coin = 3952, chain = 3013, hoard = 3064, gem = 8965, mat = 1409, phases = {
+                { result = 22006, reqs = { 17115, 17121, 17462, 2981 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 21109, reqs = { 17416, 17454, 17463, 22006 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 21105, reqs = { 21109, 17464, 18857 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8965, 'Imperial Sapphire', 250 }, { 'Mats', 1409, nil, 12 } } },
+            }},
+            { name = 'Providence', id = 18626, job = 'SMN', coin = 3952, chain = 3013, hoard = 3064, gem = 8965, mat = 1462, phases = {
+                { result = 22291, reqs = { 17126, 17127, 17571, 2982 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 21172, reqs = { 17108, 17563, 17573, 22291 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 18626, reqs = { 21172, 17576, 17528 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8965, 'Imperial Sapphire', 250 }, { 'Mats', 1462, nil, 12 } } },
+            }},
+            { name = 'Doomsday', id = 21476, job = 'RNG/COR', coin = 3952, chain = 3013, hoard = 3064, gem = 8960, mat = 1467, phases = {
+                { result = 22144, reqs = { 17254, 17260, 17271, 2983 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 21275, reqs = { 17232, 17244, 17215, 22144 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 21476, reqs = { 21275, 17245, 18706 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8960, 'Imperial Garnet', 250 }, { 'Mats', 1467, nil, 12 } } },
+            }},
+        },
+    },
+    {
+        name  = 'Arrapago',
+        color = { 0.50, 0.88, 0.50, 1.00 },  -- green (Yagudo)
+        weapons = {
+            { name = 'Ipetam', id = 20616, job = 'THF/DNC', coin = 3953, chain = 3014, hoard = 3065, gem = 8963, mat = 1459, phases = {
+                { result = 21566, reqs = { 16742, 16739, 17993, 2990 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 20617, reqs = { 16767, 19120, 17994, 21566 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 20616, reqs = { 20617, 17996, 17619 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8963, 'Imperial Peridot', 250 }, { 'Mats', 1459, nil, 12 } } },
+            }},
+            { name = 'Izuna', id = 20989, job = 'NIN', coin = 3953, chain = 3014, hoard = 3065, gem = 8963, mat = 1468, phases = {
+                { result = 21912, reqs = { 16925, 16921, 17786, 2991 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 20993, reqs = { 19280, 16911, 17787, 21912 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 20989, reqs = { 20993, 18429, 18430 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8963, 'Imperial Peridot', 250 }, { 'Mats', 1468, nil, 12 } } },
+            }},
+            { name = 'Nenekirimaru', id = 21037, job = 'SAM', coin = 3953, chain = 3014, hoard = 3065, gem = 8963, mat = 1467, phases = {
+                { result = 21976, reqs = { 16983, 16986, 17820, 2992 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 21038, reqs = { 17813, 16980, 17821, 21976 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 21037, reqs = { 21038, 17823, 18446 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8963, 'Imperial Peridot', 250 }, { 'Mats', 1467, nil, 12 } } },
+            }},
+            { name = 'Keraunos', id = 21169, job = 'BLM/SCH', coin = 3953, chain = 3014, hoard = 3065, gem = 8961, mat = 1458, phases = {
+                { result = 22088, reqs = { 17124, 17119, 17571, 2993 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 21171, reqs = { 17586, 17564, 17572, 22088 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 21169, reqs = { 21171, 17575, 17567 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8961, 'Imperial Opal', 250 }, { 'Mats', 1458, nil, 12 } } },
+            }},
+            { name = 'Phaosphaelia', id = 21224, job = 'RNG', coin = 3953, chain = 3014, hoard = 3065, gem = 8962, mat = 1462, phases = {
+                { result = 22133, reqs = { 17178, 17180, 17202, 2994 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 21226, reqs = { 17187, 17212, 17203, 22133 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 21224, reqs = { 21226, 17165, 17199 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8962, 'Imperial Amethyst', 250 }, { 'Mats', 1462, nil, 12 } } },
+            }},
+            { name = 'Linos', id = 21404, job = 'BRD', coin = 3953, chain = 3014, hoard = 3065, gem = 8964, mat = 1409, phases = {
+                { result = 22296, reqs = { 17370, 17375, 18170, 2995 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 21406, reqs = { 17346, 17982, 17995, 22296 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 21404, reqs = { 21406, 17838, 17365 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8964, 'Imperial Citrine', 250 }, { 'Mats', 1409, nil, 12 } } },
+            }},
+        },
+    },
+};
+
+
+------------------------------------------------------------
+-- Resolve item name from resource manager
+local function itemName(itemId)
+    local res = getItemRes(itemId);
+    return (res and res.Name and res.Name[1]) or string.format('Item %d', itemId);
+end
+
+-- Read incursion currency from state.currency
+------------------------------------------------------------
+local function getIncursionCurrency(name)
+    if not troveState or not troveState.currency then return nil; end
+    for _, entry in ipairs(troveState.currency) do
+        if entry.name == name then return entry.total or 0; end
+    end
+    return nil;
+end
+
+------------------------------------------------------------
+-- Render: incursion progress bar (compact, fits in phase box)
+------------------------------------------------------------
+local function renderIncursionBar(icon, have, target, width)
+    local pct = target > 0 and math.min(have / target, 1.0) or 0;
+    local barH = 12;
+
+    local dl = imgui.GetWindowDrawList();
+
+    -- Icon
+    renderIcon(icon, 12);
+    imgui.SameLine(0, 3);
+    local bx, by = imgui.GetCursorScreenPos();
+    local barW = width - 18;
+
+    -- Background
+    dl:AddRectFilled({ bx, by + 1 }, { bx + barW, by + barH },
+        imgui.GetColorU32({ 0.06, 0.06, 0.09, 0.90 }), 2);
+
+    -- Fill
+    if pct > 0 then
+        local fillCol = pct >= 1.0 and { 0.40, 0.55, 0.20, 0.70 } or { 0.25, 0.35, 0.50, 0.60 };
+        dl:AddRectFilled({ bx, by + 1 }, { bx + barW * pct, by + barH },
+            imgui.GetColorU32(fillCol), 2);
+    end
+
+    -- Fraction text (centered, with shadow)
+    local fracStr = string.format('%d/%d', math.min(have, target), target);
+    local fracW = imgui.CalcTextSize(fracStr);
+    local tx = bx + (barW - fracW) / 2;
+    dl:AddText({ tx + 1, by + 1 }, imgui.GetColorU32({ 0, 0, 0, 0.80 }), fracStr);
+    dl:AddText({ tx, by }, imgui.GetColorU32({ 1, 1, 1, 0.90 }), fracStr);
+
+    imgui.Dummy({ width, barH + 1 });
+end
+
+------------------------------------------------------------
+-- Render: single incursion weapon (3 phase boxes horizontal)
+------------------------------------------------------------
+local PHASE_LABELS = { 'Forge', 'Upgrade', 'Trade' };
+
+local function renderIncursionWeapon(wpn, zoneColor, index)
+    local hasFinal = ownedItems[wpn.id];
+    local base = ui.color('childBg');
+
+    -- Weapon name header with zone-colored background
+    local dl = imgui.GetWindowDrawList();
+    local hx, hy = imgui.GetCursorScreenPos();
+    local hw = imgui.GetContentRegionAvail();
+    local headerBg = { zoneColor[1] * 0.20, zoneColor[2] * 0.20, zoneColor[3] * 0.20, 0.70 };
+    dl:AddRectFilled({ hx, hy }, { hx + hw, hy + 24 }, imgui.GetColorU32(headerBg), 3);
+    dl:AddRectFilled({ hx, hy }, { hx + 3, hy + 24 }, imgui.GetColorU32(zoneColor));
+
+    imgui.SetCursorPosX(10);
+    renderIcon(wpn.id, 20);
+    imgui.SameLine(0, 4);
+    local nameCol = hasFinal and { 1.00, 0.85, 0.30, 1.00 } or ui.color('white');
+    imgui.TextColored(nameCol, wpn.name);
+    imgui.SameLine(0, 6);
+    imgui.TextColored(ui.color('dimmed'), wpn.job);
+    imgui.Dummy({ 0, 2 });
+
+    -- 3 phase boxes side by side
+    local gap = 4;
+    local boxW = math.floor((imgui.GetContentRegionAvail() - gap * 2) / 3);
+
+    -- Calculate box height based on max bars across phases
+    local maxBars = 0;
+    for _, phase in ipairs(wpn.phases) do
+        if phase.bars and #phase.bars > maxBars then maxBars = #phase.bars; end
+    end
+    local boxH = 32 + 24 + maxBars * 16 + 4; -- result icon + reqs row + bars + padding
+
+    for pi, phase in ipairs(wpn.phases) do
+        if pi > 1 then imgui.SameLine(0, gap); end
+
+        local hasResult = ownedItems[phase.result];
+        local bgColor;
+        if hasResult then
+            bgColor = { 0.28, 0.22, 0.08, 0.80 };
+        else
+            bgColor = { base[1] + 0.03, base[2] + 0.03, base[3] + 0.05, 0.60 };
+        end
+
+        imgui.PushStyleColor(ImGuiCol_ChildBg, bgColor);
+        imgui.BeginChild(string.format('##incph_%d_%d', index, pi), { boxW, boxH }, false, ImGuiWindowFlags_NoScrollbar);
+
+        local pdl = imgui.GetWindowDrawList();
+        local px, py = imgui.GetWindowPos();
+        local pw = imgui.GetWindowWidth();
+
+        -- Accent bar
+        local accentCol = hasResult and { 1.00, 0.85, 0.30, 1.00 } or zoneColor;
+        pdl:AddRectFilled({ px, py }, { px + 2, py + boxH }, imgui.GetColorU32(accentCol));
+
+        -- Result weapon icon + name
+        imgui.SetCursorPos({ 6, 2 });
+        if not hasResult then imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.30); end
+        renderIcon(phase.result, 24);
+        if not hasResult then imgui.PopStyleVar(); end
+        if imgui.IsItemHovered() and renderTooltip then
+            renderTooltip({ id = phase.result, name = itemName(phase.result), qty = 0 });
+        end
+        imgui.SameLine(0, 3);
+        local rNameCol = hasResult and { 1.00, 0.85, 0.30, 1.00 } or { 0.70, 0.70, 0.75, 1.00 };
+        local rName = itemName(phase.result);
+        -- Use weapon name as fallback for custom items without DAT entries
+        if rName:find('^Item %d') and pi == #wpn.phases then rName = wpn.name; end
+        -- Truncate if needed
+        if imgui.CalcTextSize(rName) > pw - 36 then
+            while #rName > 1 and imgui.CalcTextSize(rName .. '..') > pw - 36 do
+                rName = rName:sub(1, -2);
+            end
+            rName = rName .. '..';
+        end
+        imgui.TextColored(rNameCol, rName);
+
+        -- Required item icons (below result) with gold bg when owned
+        imgui.SetCursorPos({ 6, 30 });
+        local iconSz = 20;
+        for ri, reqId in ipairs(phase.reqs) do
+            if ri > 1 then imgui.SameLine(0, 2); end
+
+            local owned = ownedItems[reqId];
+
+            -- Gold background for owned items
+            if owned then
+                local ix, iy = imgui.GetCursorScreenPos();
+                pdl:AddRectFilled({ ix - 1, iy - 1 }, { ix + iconSz + 1, iy + iconSz + 1 },
+                    imgui.GetColorU32({ 0.45, 0.38, 0.10, 0.70 }), 3);
+            end
+
+            if not owned then imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.15); end
+            renderIcon(reqId, iconSz);
+            if not owned then imgui.PopStyleVar(); end
+
+            if imgui.IsItemHovered() and renderTooltip then
+                renderTooltip({ id = reqId, name = itemName(reqId), qty = 0 });
+            end
+        end
+
+        -- Currency progress bars
+        if phase.bars then
+            local barY = 54;
+            for _, bar in ipairs(phase.bars) do
+                imgui.SetCursorPos({ 6, barY });
+                local have = 0;
+                if bar[3] then
+                    have = getIncursionCurrency(bar[3]) or 0;
+                else
+                    have = itemCounts[bar[2]] or 0;
+                end
+                renderIncursionBar(bar[2], have, bar[4], pw - 12);
+                -- Tooltip on the bar
+                if imgui.IsItemHovered() and renderTooltip then
+                    renderTooltip({ id = bar[2], name = itemName(bar[2]), qty = have });
+                end
+                barY = barY + 16;
+            end
+        end
+
+        imgui.EndChild();
+        imgui.PopStyleColor(1);
+    end
+
+    imgui.Spacing();
+end
+
+------------------------------------------------------------
+-- Render: CW Incursion tab
+------------------------------------------------------------
+local function renderIncursionTab()
+    imgui.PushStyleColor(ImGuiCol_ChildBg, ui.color('windowBg'));
+    imgui.BeginChild('##incursion_list', { -1, -1 }, false);
+
+    for zi, zone in ipairs(INCURSION_ZONES) do
+        -- Zone header
+        local accentDim = { zone.color[1] * 0.35, zone.color[2] * 0.35, zone.color[3] * 0.35, 0.85 };
+        imgui.PushStyleColor(ImGuiCol_ChildBg, accentDim);
+        imgui.BeginChild(string.format('##inczone_%d', zi), { -1, 24 }, false);
+        local dl = imgui.GetWindowDrawList();
+        local wx, wy = imgui.GetWindowPos();
+        local ww = imgui.GetWindowWidth();
+        dl:AddRectFilled({ wx, wy }, { wx + 3, wy + 24 }, imgui.GetColorU32(zone.color));
+        dl:AddLine({ wx, wy + 23 }, { wx + ww, wy + 23 },
+            imgui.GetColorU32({ zone.color[1], zone.color[2], zone.color[3], 0.15 }));
+        imgui.SetCursorPosX(12);
+        imgui.SetCursorPosY(4);
+        imgui.TextColored(zone.color, zone.name);
+
+        local owned = 0;
+        for _, wpn in ipairs(zone.weapons) do
+            if ownedItems[wpn.id] then owned = owned + 1; end
+        end
+        local countStr = string.format('%d/%d', owned, #zone.weapons);
+        local cw = imgui.CalcTextSize(countStr);
+        imgui.SameLine(ww - cw - 12);
+        imgui.SetCursorPosY(4);
+        imgui.TextColored({ zone.color[1], zone.color[2], zone.color[3], 0.50 }, countStr);
+
+        imgui.EndChild();
+        imgui.PopStyleColor(1);
+
+        -- Weapon phase boxes
+        for wi, wpn in ipairs(zone.weapons) do
+            renderIncursionWeapon(wpn, zone.color, zi * 100 + wi);
+        end
+        imgui.Spacing();
+    end
+
+    imgui.EndChild();
+    imgui.PopStyleColor(1);
+end
+
+------------------------------------------------------------
 -- Render: main window
 ------------------------------------------------------------
 local function renderWindow()
@@ -755,32 +1134,37 @@ local function renderWindow()
             end
         end
 
-        imgui.Spacing();
-
-        if ui.button('Rescan', 0, 20) then
-            scanned = false;
-            rescan();
-        end
-
         imgui.Separator();
         imgui.Spacing();
 
-        -- Weapon list (3 columns)
-        imgui.BeginChild('##relic_list', { -1, -1 }, false);
-        local gap = 4;
-        local colW = math.floor((imgui.GetContentRegionAvail() - gap * 2) / 3);
-        local totalItems = #RELICS + #EXTRA_CARDS;
-        for i = 1, totalItems do
-            local col = ((i - 1) % 3);
-            if col > 0 then imgui.SameLine(0, gap); end
-            if i <= #RELICS then
-                renderRelicCard(RELICS[i], i, colW);
-            else
-                renderExtraCard(EXTRA_CARDS[i - #RELICS], i, colW);
+        -- Tab bar: Relic / Incursion
+        if imgui.BeginTabBar('##ult_tabs', ImGuiTabBarFlags_None) then
+            if imgui.BeginTabItem('Relic') then
+                imgui.BeginChild('##relic_list', { -1, -1 }, false);
+                local gap = 4;
+                local colW = math.floor((imgui.GetContentRegionAvail() - gap * 2) / 3);
+                local totalItems = #RELICS + #EXTRA_CARDS;
+                for i = 1, totalItems do
+                    local col = ((i - 1) % 3);
+                    if col > 0 then imgui.SameLine(0, gap); end
+                    if i <= #RELICS then
+                        renderRelicCard(RELICS[i], i, colW);
+                    else
+                        renderExtraCard(EXTRA_CARDS[i - #RELICS], i, colW);
+                    end
+                    if col == 2 then imgui.Spacing(); end
+                end
+                imgui.EndChild();
+                imgui.EndTabItem();
             end
-            if col == 2 then imgui.Spacing(); end
+
+            if imgui.BeginTabItem('Incursion') then
+                renderIncursionTab();
+                imgui.EndTabItem();
+            end
+
+            imgui.EndTabBar();
         end
-        imgui.EndChild();
     end
     imgui.End();
     ui.popWindowStyle(winColors);

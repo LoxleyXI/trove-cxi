@@ -57,6 +57,7 @@ Plugins add floating windows accessible from the Menu button.
 
 | Plugin | Description | Access |
 |--------|-------------|--------|
+| Ultimates | Track relic, mythic, ergon, and incursion weapon progress | All/CW |
 | Vault | Browse, withdraw, and deposit to Mog Vault | All |
 | VNM Armor | Track VNM armor pieces with Populox alerts | All |
 | Keyring | Goblin Keyring chest/coffer key tracker | CW |
@@ -75,6 +76,7 @@ Plugins add floating windows accessible from the Menu button.
 |---------|--------|
 | `/trove` | Toggle main window |
 | `/trove pf` | Load Party Finder data |
+| `/trove ultimates` | Toggle Ultimates plugin |
 | `/trove vault` | Toggle Vault plugin |
 | `/trove stronghold` | Toggle Stronghold plugin |
 | `/trove scrolls` | Toggle Scrolls plugin |
