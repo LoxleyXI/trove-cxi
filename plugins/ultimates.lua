@@ -50,150 +50,152 @@ local CURRENCY = {
 -- Each stage: { weaponId, currencyType, currencyAmount (in base units) }
 -- currencyAmount is already normalized to base denomination
 ------------------------------------------------------------
+-- Stage weapon IDs verified against scripts/enum/item.lua
+-- Pattern: base(+0), stage1(+1), stage2(+2), stage3(+3), penultimate(+3), final_75(+4)
+-- Each relic: Relic(base) → Militant/etc(stage1) → Dynamis(stage2) → Penultimate(stage3) → Final_75
 local RELICS = {
     {
         name = 'Spharai', finalId = 18264, job = 'MNK',
         stages = {
-            { weaponId = 18261, currency = 'BYNE',   amount = 400 },
-            { weaponId = 18262, currency = 'BRONZE', amount = 1400 },
-            { weaponId = 18263, currency = 'SHELL',  amount = 6100 },
-            { weaponId = 18264, currency = 'BYNE',   amount = 10000 },
+            { weaponId = 18261, currency = 'BYNE',   amount = 400 },   -- Militant Knuckles
+            { weaponId = 18262, currency = 'BRONZE', amount = 1400 },  -- Dynamis Knuckles
+            { weaponId = 18263, currency = 'SHELL',  amount = 6100 },  -- Caestus
+            { weaponId = 18264, currency = 'BYNE',   amount = 10000 }, -- Spharai
         },
     },
     {
         name = 'Mandau', finalId = 18270, job = 'THF',
         stages = {
-            { weaponId = 18267, currency = 'BYNE',   amount = 400 },
-            { weaponId = 18268, currency = 'BRONZE', amount = 1400 },
-            { weaponId = 18269, currency = 'SHELL',  amount = 6100 },
-            { weaponId = 18270, currency = 'BYNE',   amount = 10000 },
+            { weaponId = 18267, currency = 'BYNE',   amount = 400 },   -- Malefic Dagger
+            { weaponId = 18268, currency = 'BRONZE', amount = 1400 },  -- Dynamis Dagger
+            { weaponId = 18269, currency = 'SHELL',  amount = 6100 },  -- Batardeau
+            { weaponId = 18270, currency = 'BYNE',   amount = 10000 }, -- Mandau
         },
     },
     {
         name = 'Excalibur', finalId = 18276, job = 'PLD',
         stages = {
-            { weaponId = 18271, currency = 'BRONZE', amount = 400 },
-            { weaponId = 18272, currency = 'BYNE',   amount = 1400 },
-            { weaponId = 18273, currency = 'SHELL',  amount = 6100 },
-            { weaponId = 18274, currency = 'BRONZE', amount = 10000 },
+            { weaponId = 18273, currency = 'BRONZE', amount = 400 },   -- Glyptic Sword
+            { weaponId = 18274, currency = 'BYNE',   amount = 1400 },  -- Dynamis Sword
+            { weaponId = 18275, currency = 'SHELL',  amount = 6100 },  -- Caliburn
+            { weaponId = 18276, currency = 'BRONZE', amount = 10000 }, -- Excalibur
         },
     },
     {
         name = 'Ragnarok', finalId = 18282, job = 'DRK',
         stages = {
-            { weaponId = 18275, currency = 'BRONZE', amount = 400 },
-            { weaponId = 18276, currency = 'SHELL',  amount = 1600 },
-            { weaponId = 18277, currency = 'BYNE',   amount = 6100 },
-            { weaponId = 18278, currency = 'BRONZE', amount = 10000 },
+            { weaponId = 18279, currency = 'BRONZE', amount = 400 },   -- Gilded Blade
+            { weaponId = 18280, currency = 'SHELL',  amount = 1600 },  -- Dynamis Blade
+            { weaponId = 18281, currency = 'BYNE',   amount = 6100 },  -- Valhalla
+            { weaponId = 18282, currency = 'BRONZE', amount = 10000 }, -- Ragnarok
         },
     },
     {
         name = 'Guttler', finalId = 18288, job = 'BST',
         stages = {
-            { weaponId = 18279, currency = 'SHELL',  amount = 300 },
-            { weaponId = 18280, currency = 'BRONZE', amount = 1400 },
-            { weaponId = 18281, currency = 'BYNE',   amount = 6000 },
-            { weaponId = 18282, currency = 'SHELL',  amount = 10000 },
+            { weaponId = 18285, currency = 'SHELL',  amount = 300 },   -- Leonine Axe
+            { weaponId = 18286, currency = 'BRONZE', amount = 1400 },  -- Dynamis Axe
+            { weaponId = 18287, currency = 'BYNE',   amount = 6000 },  -- Ogre Killer
+            { weaponId = 18288, currency = 'SHELL',  amount = 10000 }, -- Guttler
         },
     },
     {
         name = 'Bravura', finalId = 18294, job = 'WAR',
         stages = {
-            { weaponId = 18283, currency = 'BYNE',   amount = 300 },
-            { weaponId = 18284, currency = 'SHELL',  amount = 1600 },
-            { weaponId = 18285, currency = 'BRONZE', amount = 6000 },
-            { weaponId = 18286, currency = 'BYNE',   amount = 10000 },
+            { weaponId = 18291, currency = 'BYNE',   amount = 300 },   -- Agonal Bhuj
+            { weaponId = 18292, currency = 'SHELL',  amount = 1600 },  -- Dynamis Bhuj
+            { weaponId = 18293, currency = 'BRONZE', amount = 6000 },  -- Abaddon Killer
+            { weaponId = 18294, currency = 'BYNE',   amount = 10000 }, -- Bravura
         },
     },
     {
         name = 'Gungnir', finalId = 18300, job = 'DRG',
         stages = {
-            { weaponId = 18287, currency = 'SHELL',  amount = 400 },
-            { weaponId = 18288, currency = 'BYNE',   amount = 1600 },
-            { weaponId = 18289, currency = 'BRONZE', amount = 6100 },
-            { weaponId = 18290, currency = 'SHELL',  amount = 10000 },
+            { weaponId = 18297, currency = 'SHELL',  amount = 400 },   -- Hotspur Lance
+            { weaponId = 18298, currency = 'BYNE',   amount = 1600 },  -- Dynamis Lance
+            { weaponId = 18299, currency = 'BRONZE', amount = 6100 },  -- Gae Assail
+            { weaponId = 18300, currency = 'SHELL',  amount = 10000 }, -- Gungnir
         },
     },
     {
         name = 'Apocalypse', finalId = 18306, job = 'DRK',
         stages = {
-            { weaponId = 18291, currency = 'SHELL',  amount = 500 },
-            { weaponId = 18292, currency = 'BRONZE', amount = 1600 },
-            { weaponId = 18293, currency = 'BYNE',   amount = 6200 },
-            { weaponId = 18294, currency = 'SHELL',  amount = 10000 },
+            { weaponId = 18303, currency = 'SHELL',  amount = 500 },   -- Memento Scythe
+            { weaponId = 18304, currency = 'BRONZE', amount = 1600 },  -- Dynamis Scythe
+            { weaponId = 18305, currency = 'BYNE',   amount = 6200 },  -- Bec de Faucon
+            { weaponId = 18306, currency = 'SHELL',  amount = 10000 }, -- Apocalypse
         },
     },
     {
         name = 'Kikoku', finalId = 18312, job = 'NIN',
         stages = {
-            { weaponId = 18295, currency = 'BYNE',   amount = 400 },
-            { weaponId = 18296, currency = 'SHELL',  amount = 1600 },
-            { weaponId = 18297, currency = 'BRONZE', amount = 6100 },
-            { weaponId = 18298, currency = 'BYNE',   amount = 10000 },
+            { weaponId = 18309, currency = 'BYNE',   amount = 400 },   -- Mimizuku
+            { weaponId = 18310, currency = 'SHELL',  amount = 1600 },  -- Rogetsu
+            { weaponId = 18311, currency = 'BRONZE', amount = 6100 },  -- Yoshimitsu
+            { weaponId = 18312, currency = 'BYNE',   amount = 10000 }, -- Kikoku
         },
     },
     {
         name = 'Amanomurakumo', finalId = 18318, job = 'SAM',
         stages = {
-            { weaponId = 18299, currency = 'BRONZE', amount = 300 },
-            { weaponId = 18300, currency = 'SHELL',  amount = 1500 },
-            { weaponId = 18301, currency = 'BYNE',   amount = 6000 },
-            { weaponId = 18302, currency = 'BRONZE', amount = 10000 },
+            { weaponId = 18315, currency = 'BRONZE', amount = 300 },   -- Hayatemaru
+            { weaponId = 18316, currency = 'SHELL',  amount = 1500 },  -- Oboromaru
+            { weaponId = 18317, currency = 'BYNE',   amount = 6000 },  -- Totsukanotsurugi
+            { weaponId = 18318, currency = 'BRONZE', amount = 10000 }, -- Amanomurakumo
         },
     },
     {
         name = 'Mjollnir', finalId = 18324, job = 'WHM',
         stages = {
-            { weaponId = 18303, currency = 'BRONZE', amount = 500 },
-            { weaponId = 18304, currency = 'BYNE',   amount = 1600 },
-            { weaponId = 18305, currency = 'SHELL',  amount = 6200 },
-            { weaponId = 18306, currency = 'BRONZE', amount = 10000 },
+            { weaponId = 18321, currency = 'BRONZE', amount = 500 },   -- Battering Maul
+            { weaponId = 18322, currency = 'BYNE',   amount = 1600 },  -- Dynamis Maul
+            { weaponId = 18323, currency = 'SHELL',  amount = 6200 },  -- Gullintani
+            { weaponId = 18324, currency = 'BRONZE', amount = 10000 }, -- Mjollnir
         },
     },
     {
         name = 'Claustrum', finalId = 18330, job = 'BLM',
         stages = {
-            { weaponId = 18307, currency = 'SHELL',  amount = 500 },
-            { weaponId = 18308, currency = 'BYNE',   amount = 1600 },
-            { weaponId = 18309, currency = 'BRONZE', amount = 6200 },
-            { weaponId = 18310, currency = 'SHELL',  amount = 10000 },
+            { weaponId = 18327, currency = 'SHELL',  amount = 500 },   -- Sages Staff
+            { weaponId = 18328, currency = 'BYNE',   amount = 1600 },  -- Dynamis Staff
+            { weaponId = 18329, currency = 'BRONZE', amount = 6200 },  -- Thyrus
+            { weaponId = 18330, currency = 'SHELL',  amount = 10000 }, -- Claustrum
         },
     },
     {
         name = 'Annihilator', finalId = 18336, job = 'RNG',
         stages = {
-            { weaponId = 18311, currency = 'BYNE',   amount = 500 },
-            { weaponId = 18312, currency = 'SHELL',  amount = 1500 },
-            { weaponId = 18313, currency = 'BRONZE', amount = 6200 },
-            { weaponId = 18314, currency = 'BYNE',   amount = 10000 },
+            { weaponId = 18333, currency = 'BYNE',   amount = 500 },   -- Marksmans Gun
+            { weaponId = 18334, currency = 'SHELL',  amount = 1500 },  -- Dynamis Gun
+            { weaponId = 18335, currency = 'BRONZE', amount = 6200 },  -- Ferdinand
+            { weaponId = 18336, currency = 'BYNE',   amount = 10000 }, -- Annihilator
         },
     },
     {
         name = 'Gjallarhorn', finalId = 18342, job = 'BRD',
         stages = {
-            { weaponId = 18315, currency = 'SHELL',  amount = 300 },
-            { weaponId = 18316, currency = 'BYNE',   amount = 1400 },
-            { weaponId = 18317, currency = 'BRONZE', amount = 6000 },
-            { weaponId = 18318, currency = 'SHELL',  amount = 10000 },
+            { weaponId = 18339, currency = 'SHELL',  amount = 300 },   -- Pyrrhic Horn
+            { weaponId = 18340, currency = 'BYNE',   amount = 1400 },  -- Dynamis Horn
+            { weaponId = 18341, currency = 'BRONZE', amount = 6000 },  -- Millennium Horn
+            { weaponId = 18342, currency = 'SHELL',  amount = 10000 }, -- Gjallarhorn
         },
     },
     {
         name = 'Yoichinoyumi', finalId = 18348, job = 'RNG',
         stages = {
-            { weaponId = 18319, currency = 'BRONZE', amount = 400 },
-            { weaponId = 18320, currency = 'BRONZE', amount = 1500 },
-            { weaponId = 18321, currency = 'SHELL',  amount = 6100 },
-            { weaponId = 18322, currency = 'BRONZE', amount = 10000 },
+            { weaponId = 18345, currency = 'BRONZE', amount = 400 },   -- Wolver Bow
+            { weaponId = 18346, currency = 'BRONZE', amount = 1500 },  -- Dynamis Bow
+            { weaponId = 18347, currency = 'SHELL',  amount = 6100 },  -- Futatokoroto
+            { weaponId = 18348, currency = 'BRONZE', amount = 10000 }, -- Yoichinoyumi
         },
     },
     {
         name = 'Aegis', finalId = 15070, job = 'PLD',
         stages = {
-            -- Aegis uses all 3 currencies simultaneously; we sum them
-            { weaponId = 15067, currency = 'BYNE',   amount = 100,  extraCurrency = { { 'BRONZE', 100 }, { 'SHELL', 100 } } },
-            { weaponId = 15068, currency = 'BYNE',   amount = 400,  extraCurrency = { { 'BRONZE', 400 }, { 'SHELL', 400 } } },
-            { weaponId = 15069, currency = 'BYNE',   amount = 2000, extraCurrency = { { 'BRONZE', 2000 }, { 'SHELL', 2000 } } },
-            { weaponId = 15070, currency = 'BRONZE', amount = 10000 },
+            { weaponId = 15067, currency = 'BYNE',   amount = 100,  extraCurrency = { { 'BRONZE', 100 }, { 'SHELL', 100 } } },   -- Bulwark Shield
+            { weaponId = 15068, currency = 'BYNE',   amount = 400,  extraCurrency = { { 'BRONZE', 400 }, { 'SHELL', 400 } } },   -- Dynamis Shield
+            { weaponId = 15069, currency = 'BYNE',   amount = 2000, extraCurrency = { { 'BRONZE', 2000 }, { 'SHELL', 2000 } } }, -- Ancile
+            { weaponId = 15070, currency = 'BRONZE', amount = 10000 }, -- Aegis
         },
     },
 };
