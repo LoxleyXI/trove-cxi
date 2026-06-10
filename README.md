@@ -57,6 +57,7 @@ Plugins add floating windows accessible from the Menu button.
 
 | Plugin | Description | Access |
 |--------|-------------|--------|
+| Profile | Job levels, prestige stars, and crafting skills | All |
 | Ultimates | Track relic, mythic, ergon, and incursion weapon progress | All/CW |
 | Vault | Browse, withdraw, and deposit to Mog Vault | All |
 | VNM Armor | Track VNM armor pieces with Populox alerts | All |
@@ -76,6 +77,7 @@ Plugins add floating windows accessible from the Menu button.
 |---------|--------|
 | `/trove` | Toggle main window |
 | `/trove pf` | Load Party Finder data |
+| `/trove profile` | Toggle Profile plugin |
 | `/trove ultimates` | Toggle Ultimates plugin |
 | `/trove vault` | Toggle Vault plugin |
 | `/trove stronghold` | Toggle Stronghold plugin |
