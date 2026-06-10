@@ -13,6 +13,32 @@ local imgui = require('imgui');
 local renderIcon = nil;
 local getItemRes = nil;
 local ui = nil;
+local renderFileIcon = nil;
+
+------------------------------------------------------------
+-- Plugin data protocol (aether/prismatic key counts)
+------------------------------------------------------------
+local PACKET_ID       = 0x1A4;
+local C2S_PLUGIN_DATA = 17;
+local PLUGIN_ID       = 2;
+
+local keyCounts = { prismatic = 0, aether = 0 };
+local keyCountsLoaded = false;
+local keyCountsLoading = false;
+local keyCountsRequestTime = 0;
+
+local REFRESH_INTERVAL = 5; -- re-request every 5 seconds while open
+
+local function requestKeyCounts()
+    if keyCountsLoading then return; end
+    keyCountsLoading = true;
+    keyCountsRequestTime = os.clock();
+    local p = {};
+    for i = 1, 64 do p[i] = 0; end
+    p[5] = C2S_PLUGIN_DATA;
+    p[7] = PLUGIN_ID;
+    AshitaCore:GetPacketManager():AddOutgoingPacket(PACKET_ID, p);
+end
 
 ------------------------------------------------------------
 -- Key data
@@ -203,12 +229,64 @@ end
 -- Window state
 ------------------------------------------------------------
 local isOpen = { false };
+local wasOpen = false;
 
 ------------------------------------------------------------
 -- Main render (floating window)
 ------------------------------------------------------------
+local PRISMATIC_KEY_ID = 9473;
+local AETHER_KEY_ID   = 9472;
+
+local function renderKeyCountHeader()
+    -- Prismatic Key icon + count
+    renderIcon(PRISMATIC_KEY_ID, 16);
+    imgui.SameLine(0, 4);
+    if keyCountsLoaded then
+        imgui.TextColored({ 0.80, 0.55, 0.90, 1.0 }, tostring(keyCounts.prismatic));
+    else
+        imgui.TextColored({ 0.50, 0.50, 0.55, 1.0 }, '?');
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip(keyCountsLoaded
+            and string.format('Prismatic Keys: %d\nUse at Aether Caskets (4 items)', keyCounts.prismatic)
+            or 'Loading...');
+    end
+
+    imgui.SameLine(0, 14);
+
+    -- Aether Key icon + count
+    renderIcon(AETHER_KEY_ID, 16);
+    imgui.SameLine(0, 4);
+    if keyCountsLoaded then
+        imgui.TextColored({ 0.55, 0.80, 0.90, 1.0 }, tostring(keyCounts.aether));
+    else
+        imgui.TextColored({ 0.50, 0.50, 0.55, 1.0 }, '?');
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip(keyCountsLoaded
+            and string.format('Aether Keys: %d\nUse at Aether Caskets (3 items)', keyCounts.aether)
+            or 'Loading...');
+    end
+end
+
 local function renderWindow()
-    if not isOpen[1] then return; end
+    if not isOpen[1] then
+        wasOpen = false;
+        return;
+    end
+
+    -- Request key counts on open and periodically while open
+    if not wasOpen then
+        wasOpen = true;
+        requestKeyCounts();
+    elseif keyCountsLoaded and not keyCountsLoading and os.clock() - keyCountsRequestTime > REFRESH_INTERVAL then
+        requestKeyCounts();
+    end
+
+    -- Loading timeout
+    if keyCountsLoading and os.clock() - keyCountsRequestTime > 5 then
+        keyCountsLoading = false;
+    end
 
     scanKeyring();
 
@@ -224,7 +302,7 @@ local function renderWindow()
     local title = string.format('Keyring [%d/%d]###trove_keyring',
         chestOwned + cofferOwned, #CHEST_KEYS + #COFFER_KEYS);
 
-    imgui.SetNextWindowSize({ 560, 500 }, ImGuiCond_FirstUseEver);
+    imgui.SetNextWindowSize({ 560, 530 }, ImGuiCond_FirstUseEver);
     imgui.SetNextWindowSizeConstraints({ 480, 300 }, { 700, 900 });
 
     local winColors = ui.pushWindowStyle();
@@ -233,6 +311,11 @@ local function renderWindow()
         if not hasKeyring then
             ui.dim('No Goblin Keyring found.');
         else
+            -- Key count header (prismatic + aether)
+            renderKeyCountHeader();
+            imgui.Spacing();
+            imgui.Separator();
+            imgui.Spacing();
             local winW = imgui.GetWindowWidth();
             local colW = (winW - 24) / 2;
 
@@ -269,11 +352,13 @@ end
 return {
     name        = 'Keyring',
     description = 'Goblin Keyring chest/coffer key collection tracker',
+    pluginId    = PLUGIN_ID,
 
-    init = function(sharedRenderIcon, sharedGetItemRes, sharedUi)
-        renderIcon = sharedRenderIcon;
-        getItemRes = sharedGetItemRes;
-        ui = sharedUi;
+    init = function(sharedRenderIcon, sharedGetItemRes, sharedUi, sharedRenderTooltip, sharedRenderFileIcon)
+        renderIcon     = sharedRenderIcon;
+        getItemRes     = sharedGetItemRes;
+        ui             = sharedUi;
+        renderFileIcon = sharedRenderFileIcon;
     end,
 
     window = {
@@ -283,4 +368,20 @@ return {
         icon    = 3003,
         cwOnly  = true,
     },
+
+    onRender = function(state)
+        if not isOpen[1] then
+            wasOpen = false;
+        end
+    end,
+
+    onPluginData = function(rawData, state)
+        local function u8(off)
+            return struct.unpack('B', rawData, off + 1);
+        end
+        keyCounts.prismatic = u8(0x06) + u8(0x07) * 256;
+        keyCounts.aether    = u8(0x08) + u8(0x09) * 256;
+        keyCountsLoaded  = true;
+        keyCountsLoading = false;
+    end,
 };
