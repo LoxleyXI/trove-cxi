@@ -89,11 +89,11 @@ end
 -- Initialize all plugins with shared functions
 -- Passes: renderIcon, getItemRes, ui (theme helper module)
 ------------------------------------------------------------
-plugins.initAll = function(renderIcon, getItemRes, renderTooltip, renderFileIcon)
+plugins.initAll = function(renderIcon, getItemRes, renderTooltip, renderFileIcon, renderFileImage)
     local ui = require('utils/ui');
     for _, entry in ipairs(loaded) do
         if entry.plugin.init then
-            local ok, err = pcall(entry.plugin.init, renderIcon, getItemRes, ui, renderTooltip, renderFileIcon);
+            local ok, err = pcall(entry.plugin.init, renderIcon, getItemRes, ui, renderTooltip, renderFileIcon, renderFileImage);
             if not ok then
                 print(string.format('[trove] Plugin %s init error: %s', entry.plugin.name, tostring(err)));
             end
@@ -290,6 +290,20 @@ plugins.getWindowPlugins = function()
     end
     for _, p in ipairs(bottom) do top[#top + 1] = p; end
     return top;
+end
+
+------------------------------------------------------------
+-- Get top bar buttons from plugins
+------------------------------------------------------------
+plugins.getTopBarButtons = function()
+    local buttons = {};
+    for _, entry in ipairs(loaded) do
+        local btn = entry.plugin.topBarButton;
+        if btn and (not btn.isVisible or btn.isVisible()) then
+            buttons[#buttons + 1] = btn;
+        end
+    end
+    return buttons;
 end
 
 ------------------------------------------------------------

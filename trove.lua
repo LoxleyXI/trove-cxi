@@ -1390,9 +1390,20 @@ local function renderFileIcon(filename, size)
     return false;
 end
 
+-- Render a file-based texture at arbitrary width/height
+local function renderFileImage(filename, w, h)
+    local tex = loadFileTexture(filename);
+    local handle = textureHandles[filename];
+    if tex and tex ~= false and handle ~= nil then
+        imgui.Image(handle, { w, h });
+        return true;
+    end
+    return false;
+end
+
 -- Inject shared functions into plugins after they load
 local function initPlugins()
-    trove_plugins.initAll(renderIcon, getItemRes, renderTooltip, renderFileIcon);
+    trove_plugins.initAll(renderIcon, getItemRes, renderTooltip, renderFileIcon, renderFileImage);
 end
 
 local function renderBadges(flags)
@@ -3042,14 +3053,41 @@ local function renderWindow()
             end
         end
 
-        -- Right: Menu button (purple tint, amber on alert)
+        -- Right: top bar buttons + Menu button
         local menuW = imgui.CalcTextSize('Menu') + 18;
         local rightX = ww - menuW - 12;
 
         if vnmPlugin then
             local vnmW = imgui.CalcTextSize('VNM') + 18;
             rightX = rightX - vnmW - 4;
-            imgui.SameLine(rightX);
+        end
+
+        -- Plugin top bar buttons (rendered left of VNM/Menu)
+        local topBarButtons = trove_plugins.getTopBarButtons();
+        for bi = #topBarButtons, 1, -1 do
+            local btn = topBarButtons[bi];
+            local btnW = imgui.CalcTextSize(btn.label) + 18;
+            rightX = rightX - btnW - 4;
+        end
+
+        -- Render plugin top bar buttons
+        local btnX = rightX;
+        for _, btn in ipairs(topBarButtons) do
+            local btnW = imgui.CalcTextSize(btn.label) + 18;
+            imgui.SameLine(btnX);
+            imgui.PushStyleColor(ImGuiCol_Button, { 0.15, 0.25, 0.35, 0.90 });
+            imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.22, 0.35, 0.48, 0.95 });
+            imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.30, 0.42, 0.58, 1.00 });
+            if imgui.Button(btn.label .. '##trove_tb_' .. btn.label, { btnW, 22 }) then
+                btn.action();
+            end
+            imgui.PopStyleColor(3);
+            btnX = btnX + btnW + 4;
+        end
+
+        if vnmPlugin then
+            local vnmW = imgui.CalcTextSize('VNM') + 18;
+            imgui.SameLine(btnX);
             imgui.PushStyleColor(ImGuiCol_Button, { 0.35, 0.25, 0.10, 0.90 });
             imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.48, 0.35, 0.15, 0.95 });
             imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.55, 0.42, 0.20, 1.00 });
@@ -3121,7 +3159,14 @@ local function renderWindow()
                 local win = plugin.window;
                 if not (win.cwOnly and not state.isCrystalWarrior) then
                     if win.separator or plugin._menuSeparator then imgui.Separator(); end
-                    if win.icon then renderIcon(win.icon, 16); imgui.SameLine(0, 6); end
+                    if win.icon then
+                        if type(win.icon) == 'string' then
+                            renderFileIcon(win.icon, 16);
+                        else
+                            renderIcon(win.icon, 16);
+                        end
+                        imgui.SameLine(0, 6);
+                    end
                     local label = win.label or plugin.name;
                     if plugin.hasAlert and plugin.hasAlert() then label = label .. ' (!)'; end
                     if imgui.Selectable(label, win.isOpen[1]) then
@@ -3339,6 +3384,7 @@ ashita.events.register('d3d_present', 'trove_render', function()
         AshitaCore:GetChatManager():QueueCommand(1, string.format('/bind %s /trove', KEYBIND));
         trove_plugins.load();
         initPlugins();
+        state.isOpen = ui.isOpen;  -- expose to plugins for login auto-open
     end
 
     if ui.isOpen[1] then processSearchDebounce(); end

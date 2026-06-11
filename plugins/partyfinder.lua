@@ -19,7 +19,49 @@ local renderIcon = nil;
 local getItemRes = nil;
 local ui = nil;
 local renderTooltip = nil;
-local renderFileIcon = nil;
+local renderFileIcon  = nil;
+local renderFileImage = nil;
+
+------------------------------------------------------------
+-- Config persistence
+------------------------------------------------------------
+local function getConfigPath()
+    return string.format('%sconfig\\addons\\trove\\pf_settings.lua', AshitaCore:GetInstallPath());
+end
+
+local function savePfConfig()
+    local dir = string.format('%sconfig\\addons\\trove\\', AshitaCore:GetInstallPath());
+    os.execute('if not exist "' .. dir .. '" mkdir "' .. dir .. '"');
+    local f = io.open(getConfigPath(), 'w');
+    if f then
+        f:write('return {\n');
+        f:write(string.format('    showHud = %s,\n', tostring(pfSettings.showHud)));
+        f:write(string.format('    openOnLogin = %s,\n', tostring(pfSettings.openOnLogin)));
+        f:write(string.format('    hudBackground = %s,\n', tostring(pfSettings.hudBackground)));
+        f:write(string.format('    hudBgOpacity = %.2f,\n', pfSettings.hudBgOpacity));
+        f:write(string.format('    showPartyButton = %s,\n', tostring(pfSettings.showPartyButton)));
+        f:write(string.format('    lfmNotifications = %s,\n', tostring(pfSettings.lfmNotifications)));
+        f:write(string.format('    tooltipsEnabled = %s,\n', tostring(pfSettings.tooltipsEnabled)));
+        f:write('};\n');
+        f:close();
+    end
+end
+
+local function loadPfConfig()
+    local fn = loadfile(getConfigPath());
+    if fn then
+        local ok, result = pcall(fn);
+        if ok and type(result) == 'table' then
+            if result.showHud ~= nil then pfSettings.showHud = result.showHud; end
+            if result.openOnLogin ~= nil then pfSettings.openOnLogin = result.openOnLogin; end
+            if result.hudBackground ~= nil then pfSettings.hudBackground = result.hudBackground; end
+            if result.hudBgOpacity ~= nil then pfSettings.hudBgOpacity = result.hudBgOpacity; end
+            if result.showPartyButton ~= nil then pfSettings.showPartyButton = result.showPartyButton; end
+            if result.lfmNotifications ~= nil then pfSettings.lfmNotifications = result.lfmNotifications; end
+            if result.tooltipsEnabled ~= nil then pfSettings.tooltipsEnabled = result.tooltipsEnabled; end
+        end
+    end
+end
 
 ------------------------------------------------------------
 -- Packet protocol (0x1A2)
@@ -213,14 +255,23 @@ local selectedType   = 1;       -- 1=LFG, 2=LFM
 local autoAcceptBuf  = { false };
 local minLevelBuf    = { 0 };
 
--- Settings (defaults, persistence added in Phase 2)
+-- Settings (persisted via settings.lua)
 local pfSettings = {
     lfmNotifications = true,
     tooltipsEnabled  = true,
     confirmWithdraw  = true,
     joinableOnly     = true,
+    showHud          = false,
+    openOnLogin      = false,
+    hudBackground    = false,
+    hudBgOpacity     = 0.4,
+    showPartyButton  = true,
     blacklist        = {},
 };
+
+local isPfSettingsOpen = false;
+local loginAutoOpenDone = false;
+local pfWindowOpen = { false };
 
 -- Refresh state
 local lastRefreshTime     = 0;
@@ -675,6 +726,18 @@ local function renderListingTab(listingType)
     imgui.PushStyleColor(ImGuiCol_ChildBg, ui.color('windowBg'));
     imgui.BeginChild('##pf_listings', { -1, -1 }, false);
 
+    -- Background image behind listings
+    if pfSettings.hudBackground and renderFileImage then
+        local bgAlpha = pfSettings.hudBgOpacity or 0.4;
+        local savedCx, savedCy = imgui.GetCursorPos();
+        local cw, ch = imgui.GetContentRegionAvail();
+        imgui.SetCursorPos({ 0, 0 });
+        imgui.PushStyleVar(ImGuiStyleVar_Alpha, bgAlpha);
+        renderFileImage('pf_bg.png', cw, ch);
+        imgui.PopStyleVar();
+        imgui.SetCursorPos({ savedCx, savedCy });
+    end
+
     if #filtered == 0 then
         imgui.Spacing();
         ui.dim(listingType == 1 and 'No players looking for group.' or 'No groups recruiting.');
@@ -695,6 +758,18 @@ end
 local function renderActivityTab()
     imgui.PushStyleColor(ImGuiCol_ChildBg, ui.color('windowBg'));
     imgui.BeginChild('##pf_activity', { -1, -1 }, false);
+
+    -- Background image behind activity
+    if pfSettings.hudBackground and renderFileImage then
+        local bgAlpha = pfSettings.hudBgOpacity or 0.4;
+        local savedCx, savedCy = imgui.GetCursorPos();
+        local cw, ch = imgui.GetContentRegionAvail();
+        imgui.SetCursorPos({ 0, 0 });
+        imgui.PushStyleVar(ImGuiStyleVar_Alpha, bgAlpha);
+        renderFileImage('pf_bg.png', cw, ch);
+        imgui.PopStyleVar();
+        imgui.SetCursorPos({ savedCx, savedCy });
+    end
 
     if #activityLog == 0 then
         ui.dim('No activity yet.');
@@ -753,6 +828,10 @@ local function renderActionBar()
         if ui.button('Looking for Members##pf_lfm_reg', 0, 22) then
             selectedType = 2;
             isRegisterOpen = true;
+        end
+        imgui.SameLine(0, 6);
+        if ui.button('Settings##pf_settings_btn', 0, 22) then
+            isPfSettingsOpen = not isPfSettingsOpen;
         end
     end
 end
@@ -1028,6 +1107,145 @@ local function renderIncomingRequests()
 end
 
 ------------------------------------------------------------
+-- PF Settings panel (floating window)
+------------------------------------------------------------
+local function renderPfSettingsPanel()
+    if not isPfSettingsOpen then return; end
+
+    local pushed = ui.pushWindowStyle();
+    imgui.SetNextWindowSize({ 280, 0 }, ImGuiCond_FirstUseEver);
+
+    local open = { true };
+    if imgui.Begin('Party Finder Settings##pf_settings', open, ImGuiWindowFlags_AlwaysAutoResize) then
+        local changed = false;
+
+        ui.colored('Display', 'header');
+        imgui.Spacing();
+
+        local partyBtn = { pfSettings.showPartyButton };
+        if imgui.Checkbox('Show Party button in top bar', partyBtn) then
+            pfSettings.showPartyButton = partyBtn[1];
+            changed = true;
+        end
+
+        local hud = { pfSettings.showHud };
+        if imgui.Checkbox('Show HUD widget', hud) then
+            pfSettings.showHud = hud[1];
+            changed = true;
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip('Show LFG/LFM counts on screen');
+        end
+
+        local bg = { pfSettings.hudBackground };
+        if imgui.Checkbox('Show background image', bg) then
+            pfSettings.hudBackground = bg[1];
+            changed = true;
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip('Show CatsEyeXI background on Party tab');
+        end
+
+        if pfSettings.hudBackground then
+            local opacityPct = { math.floor(pfSettings.hudBgOpacity * 100) };
+            imgui.PushItemWidth(140);
+            if imgui.SliderInt('Background opacity', opacityPct, 10, 100, '%d%%') then
+                pfSettings.hudBgOpacity = opacityPct[1] / 100;
+                changed = true;
+            end
+            imgui.PopItemWidth();
+        end
+
+        local login = { pfSettings.openOnLogin };
+        if imgui.Checkbox('Open Party Finder on login', login) then
+            pfSettings.openOnLogin = login[1];
+            changed = true;
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip('Auto-open Trove with Party tab on login');
+        end
+
+        imgui.Spacing();
+        imgui.Spacing();
+        ui.colored('Notifications', 'header');
+        imgui.Spacing();
+
+        local lfm = { pfSettings.lfmNotifications };
+        if imgui.Checkbox('LFM chat notifications', lfm) then
+            pfSettings.lfmNotifications = lfm[1];
+            changed = true;
+        end
+
+        local tips = { pfSettings.tooltipsEnabled };
+        if imgui.Checkbox('Show tooltips', tips) then
+            pfSettings.tooltipsEnabled = tips[1];
+            changed = true;
+        end
+
+        if changed then savePfConfig(); end
+    end
+    imgui.End();
+    ui.popWindowStyle(pushed);
+
+    if not open[1] then isPfSettingsOpen = false; end
+end
+
+------------------------------------------------------------
+-- HUD widget (persistent on-screen overlay)
+------------------------------------------------------------
+local function renderHudWidget()
+    if not pfSettings.showHud then return; end
+
+    local lfgCount = 0;
+    local lfmCount = 0;
+    for _, e in ipairs(entries) do
+        if not isHiddenByFilter(e) then
+            if (e.listingType or 1) == 1 then lfgCount = lfgCount + 1;
+            else lfmCount = lfmCount + 1; end
+        end
+    end
+
+    local total = lfgCount + lfmCount;
+
+    imgui.SetNextWindowPos({ 10, 38 }, ImGuiCond_FirstUseEver);
+    imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 6 });
+    imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 6);
+    imgui.PushStyleColor(ImGuiCol_WindowBg, { 0.04, 0.04, 0.06, 0.85 });
+    imgui.PushStyleColor(ImGuiCol_Border, { 1, 1, 1, 0.08 });
+
+    local flags = bit.bor(
+        ImGuiWindowFlags_NoTitleBar,
+        ImGuiWindowFlags_NoResize,
+        ImGuiWindowFlags_AlwaysAutoResize,
+        ImGuiWindowFlags_NoScrollbar,
+        ImGuiWindowFlags_NoFocusOnAppearing,
+        ImGuiWindowFlags_NoBringToFrontOnFocus
+    );
+
+    if imgui.Begin('##pf_hud', { true }, flags) then
+        if renderFileIcon then
+            renderFileIcon('lfp.png', 20);
+            imgui.SameLine(0, 6);
+        end
+        imgui.SetCursorPosY(imgui.GetCursorPosY() + 2);
+        imgui.TextColored({ 0.55, 0.80, 0.55, 1.0 },
+            string.format('LFM %d', lfmCount));
+        imgui.SameLine(0, 10);
+        imgui.TextColored({ 0.55, 0.70, 0.90, 1.0 },
+            string.format('LFG %d', lfgCount));
+
+        if isRegistered then
+            imgui.SameLine(0, 10);
+            imgui.TextColored({ 0.40, 1.0, 0.40, 1.0 }, '*');
+        end
+    end
+    imgui.End();
+
+    imgui.PopStyleColor(2);
+    imgui.PopStyleVar(2);
+end
+
+------------------------------------------------------------
 -- Tab content (rendered inside the main Trove tab bar)
 ------------------------------------------------------------
 local pfTabActive = false;    -- true when tab rendered this frame
@@ -1094,17 +1312,27 @@ local function renderTabContent(state)
 end
 
 ------------------------------------------------------------
--- Tab label with listing count
+-- Window render (standalone floating window)
 ------------------------------------------------------------
-local function getTabLabel()
+local function renderPfWindow()
+    if not pfWindowOpen[1] then return; end
+
+    local pushed = ui.pushWindowStyle();
+    imgui.SetNextWindowSize({ 520, 500 }, ImGuiCond_FirstUseEver);
+
     local count = 0;
     for _, e in ipairs(entries) do
         if not isHiddenByFilter(e) then count = count + 1; end
     end
-    if count > 0 then
-        return string.format('Party (%d)', count);
+    local title = count > 0
+        and string.format('Party Finder (%d)###trove_pf_window', count)
+        or 'Party Finder###trove_pf_window';
+
+    if imgui.Begin(title, pfWindowOpen, ImGuiWindowFlags_None) then
+        renderTabContent({ isOpen = pfWindowOpen });
     end
-    return 'Party';
+    imgui.End();
+    ui.popWindowStyle(pushed);
 end
 
 ------------------------------------------------------------
@@ -1154,29 +1382,39 @@ return {
     name        = 'Party Finder',
     description = 'Find groups, register LFG/LFM, duty roulette',
 
-    init = function(sharedRenderIcon, sharedGetItemRes, sharedUi, sharedRenderTooltip, sharedRenderFileIcon)
-        renderIcon = sharedRenderIcon;
-        getItemRes = sharedGetItemRes;
-        ui = sharedUi;
-        renderTooltip = sharedRenderTooltip;
+    init = function(sharedRenderIcon, sharedGetItemRes, sharedUi, sharedRenderTooltip, sharedRenderFileIcon, sharedRenderFileImage)
+        renderIcon     = sharedRenderIcon;
+        getItemRes     = sharedGetItemRes;
+        ui             = sharedUi;
+        renderTooltip  = sharedRenderTooltip;
         renderFileIcon = sharedRenderFileIcon;
+        renderFileImage = sharedRenderFileImage;
+        loadPfConfig();
     end,
 
     commands = {
         pf = function(state, args)
-            -- Close floating panels if open
-            isRegisterOpen = false;
-            -- Ensure data is loaded
-            if #entries == 0 then requestRefresh(); end
+            pfWindowOpen[1] = not pfWindowOpen[1];
+            if pfWindowOpen[1] and #entries == 0 then requestRefresh(); end
         end,
     },
 
-    -- Main tab in Trove window (dynamic label with count, priority = 2nd position)
-    tab = {
-        label    = 'Party',
-        render   = renderTabContent,
-        getLabel = getTabLabel,
-        priority = true,
+    -- Floating window (standalone Party Finder panel)
+    window = {
+        isOpen = pfWindowOpen,
+        render = renderPfWindow,
+        label  = 'Party Finder',
+        icon   = 'lfp.png',
+    },
+
+    -- Top bar button (rendered left of Menu in trove.lua)
+    topBarButton = {
+        label = 'Party',
+        isVisible = function() return pfSettings.showPartyButton; end,
+        action = function()
+            pfWindowOpen[1] = not pfWindowOpen[1];
+            if pfWindowOpen[1] and #entries == 0 then requestRefresh(); end
+        end,
     },
 
     -- Status strip data (called by trove.lua to render above tab bar)
@@ -1574,18 +1812,26 @@ return {
 
     -- Periodic: auto-refresh, ping timeout, floating windows
     onRender = function(state)
-        -- Close floating panels when Trove window is closed (Ctrl+Z toggle)
-        -- pfTabActive is set to true in renderTabContent, reset here each frame
-        if isRegisterOpen and not pfTabActive then
+        -- Close floating panels when PF window is closed
+        if isRegisterOpen and not pfWindowOpen[1] then
             isRegisterOpen = false;
         end
-        pfTabActive = false;
 
-        -- Floating windows (register panel, roulette popup, join requests)
+        -- Floating windows (register panel, roulette popup, join requests, settings)
         -- These render regardless of which tab is active
         renderRegisterPanel();
         renderRoulettePopup();
         renderIncomingRequests();
+        renderPfSettingsPanel();
+
+        -- HUD widget (always visible when enabled)
+        renderHudWidget();
+
+        -- Login auto-open: after first data load, open PF window
+        if pfSettings.openOnLogin and not loginAutoOpenDone and #entries > 0 then
+            loginAutoOpenDone = true;
+            pfWindowOpen[1] = true;
+        end
 
         -- Auto-refresh (always active, not gated on tab visibility)
         if os.clock() > lastRefreshTime + autoRefreshInterval then
