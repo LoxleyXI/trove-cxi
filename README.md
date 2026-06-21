@@ -4,14 +4,14 @@ Server-specific Trove plugins for CatsEyeXI. Requires [trove](https://github.com
 
 ## Install
 
-Clone into trove's `plugins_server/` directory:
+Clone into trove's `plugins/` directory:
 
 ```
 cd <Ashita>/addons/trove
-git clone git@github.com:LoxleyX/trove-cxi.git plugins_server
+git clone git@github.com:LoxleyX/trove-cxi.git plugins
 ```
 
-The trove plugin loader auto-discovers plugins from both `plugins/` and `plugins_server/`.
+The trove plugin loader auto-discovers `.lua` files from `core/` (built-in) and `plugins/` (server-specific).
 
 ## Plugins
 
