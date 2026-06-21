@@ -1394,6 +1394,9 @@ return {
         renderFileIcon = sharedRenderFileIcon;
         renderFileImage = sharedRenderFileImage;
         loadPfConfig();
+
+        -- Unload the standalone partyfinder addon if it's running (superseded by this plugin)
+        AshitaCore:GetChatManager():QueueCommand(1, '/addon unload partyfinder');
     end,
 
     commands = {
