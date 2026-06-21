@@ -636,6 +636,12 @@ local function updateTexture()
 end
 
 local function destroyTexture()
+    if texture then
+        pcall(function()
+            ffi.gc(texture, nil)
+            texture:Release()
+        end)
+    end
     texture   = nil
     texHandle = nil
 end
